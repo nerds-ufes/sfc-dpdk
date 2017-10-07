@@ -1,20 +1,24 @@
 ﻿#include <stdio.h>
 #include <stdlib.h>
+#include <getopt.h>
 
 #include <rte_eal.h>
+#include <rte_ethdev.h>
+#include <rte_lcore.h>
+
 
 #define MEMPOOL_CACHE_SIZE 256
 
-static nb_mbuf = 4096; /* I might change this value later*/
+#define NB_MBUF 4096 /* I might change this value later*/
 
-static sfcapp_enabled_port_mask = 0;
+static uint32_t sfcapp_enabled_port_mask = 0;
 
 struct sfcapp_port_assoc {
     uint32_t rx_net;
     uint32_t tx_net;
     uint32_t rx_sf;
     uint32_t tx_sf; 
-}
+};
 
 static struct rte_mempool *sfcapp_pktmbuf_pool;
 
@@ -33,27 +37,69 @@ static const struct rte_eth_conf port_cfg = {
     },
 };
 
-void 
-parse_args(int argc, char **argv){
-    /* TODO: Implement argument parsing
-     * List of arguments possible arguments
-     * (Considering single configurable application)
-     * - Default EAL arguments
-     * - Type (classifier, proxy, SFF)
-     * - Configuration file (with rules, list of SFs, etc )
-     * - Port assoc (rx/tx to SF/net) [rx_net,tx_net,rx_sf,tx_sf]
-     * - Hash table size
-     */
+static int
+parse_portmask(const char *portmask)
+{
+	char *end = NULL;
+	unsigned long pm;
 
-    /* Read port assoc and save in sfcapp_port_assoc*/   
+	/* parse hexadecimal string */
+	pm = strtoul(portmask, &end, 16);
+	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0'))
+		return -1;
+
+	if (pm == 0)
+		return -1;
+
+	return pm;
+}
+
+static const char sfcapp_options[] = {
+    'p', /* Port mask */
+    't', /* SFC entity type*/
+    'f',
+    'h', /* Print usage */
+    'H' /* Hash table size*/
+};
+
+static void 
+parse_args(int argc, char **argv){
+    /* List of possible arguments
+     * -t : Type (classifier, proxy, SFF)
+     * -f : Configuration file (with rules, list of SFs, etc )
+     * -H : Hash table size
+     * -h : Print usage information
+     */
+    int sfcapp_opt;
+
+    while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:")) != -1){
+        switch(sfcapp_opt){
+            case 'p':
+                sfcapp_enabled_port_mask = parse_portmask(optarg);
+                break;
+            case 't':
+                break;
+            case 'f':
+                break;
+            case 'h':
+                break;
+            case 'H':
+                break;
+            case '?':
+                break;
+            default:
+                rte_exit(EXIT_FAILURE,"Unrecognized option: %c\n",sfcapp_opt);
+                break;
+        }
+    }
 }
 
 /* Function to allocate memory to be used by the application */ 
-void
+static void
 alloc_mem(unsigned n_mbuf){
 
     unsigned lcore_id;
-    char* pool_name = "mbuf_pool";
+    const char* pool_name = "mbuf_pool";
     int socket_id = 0; /* Using only one socket */
 
     for(lcore_id = 0; lcore_id < RTE_MAX_LCORE; lcore_id++){
@@ -84,6 +130,7 @@ main(int argc, char **argv){
 
     int ret;
     int n_ports;
+    unsigned lcore_id;
 
     ret = rte_eal_init(argc,argv);
     if(ret < 0)
@@ -92,20 +139,27 @@ main(int argc, char **argv){
     argc -= ret;
     argv += ret;
 
-    /* parse_args(argc,argv); */
+    parse_args(argc,argv);
  
-    alloc_mem(nb_mbuf);
+    alloc_mem(NB_MBUF);
 
     /* setup match table */
 
     n_ports = rte_eth_dev_count();
-    if(n_ports == 0)
-        rte_exit(EXIT_FAILURE, "No Ethernet ports available\n");
+
+    if(n_ports < 2)
+        rte_exit(EXIT_FAILURE, 
+            "Not enough Ethernet ports (%d) available\n",
+            n_ports);
 
     /* configure ports according to port mask and port assoc*/
+
+    /* Assign one lcore for RX/TX and another for encap/decap tasks
+     * Only one queue per port will be used.
+     */ 
     
-    /* init slave cores with configuration */
 
     /* run main loop */
 
+    return ret;
 }
