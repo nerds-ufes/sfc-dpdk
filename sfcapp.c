@@ -22,14 +22,8 @@
 /* Remove later*/
 int n_rx=0, n_tx=0;
 
-static uint32_t sfcapp_enabled_port_mask = 0;
-
-struct sfcapp_port_assoc {
-    uint32_t rx_net;
-    uint32_t tx_net;
-    uint32_t rx_sf;
-    uint32_t tx_sf; 
-};
+static uint8_t nb_ports;
+struct sfcapp_config sfcapp_cfg;
 
 #ifdef SFCAPP_MULTICORE
 /*Rings for intercore communication*/
@@ -53,6 +47,31 @@ static const struct rte_eth_conf port_cfg = {
         .mq_mode = ETH_MQ_TX_NONE,
     },
 };
+
+static void sfcapp_assoc_ports(int portmask){
+    uint8_t i;
+    int count = 2; /* We'll only setup 2 ports */
+
+    nb_ports = rte_eth_dev_count();
+    if(nb_port < 2)
+        rte_exit(EXIT_FAILURE,"Not enough ports! 2 needed.\n");
+
+    for(i = 0 ; i < nb_ports && c > 0 ; i++, c--){
+        if(portmask & (1 << i) == 0)
+            continue;
+    
+        switch(count){
+            case 2:
+                sfcapp_cfg.rx_port = i;
+                break;
+            case 1:
+                sfcapp_cfg.tx_port = i;
+                break;
+            default:
+                break;
+        }
+    }
+}
 
 static int
 parse_portmask(const char *portmask)
@@ -88,11 +107,16 @@ parse_args(int argc, char **argv){
      * -h : Print usage information
      */
     int sfcapp_opt;
+    int pm;
 
     while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:")) != -1){
         switch(sfcapp_opt){
             case 'p':
-                sfcapp_enabled_port_mask = parse_portmask(optarg);
+                pm = parse_portmask(optarg);
+                if(pm < 0)
+                    rte_exit(EXIT_FAILURE,"Failed to parse portmask\n");
+                else
+                    setup_ports(pm);
                 break;
             case 't':
                 break;
@@ -256,7 +280,6 @@ int
 main(int argc, char **argv){
 
     int ret;
-    int nb_ports;
     int nb_lcores;
     uint8_t port;
 
@@ -289,26 +312,15 @@ main(int argc, char **argv){
         rte_exit(EXIT_FAILURE,"Failed to setup internal communication rings.\n");
     
     #endif
-
-    /* setup ports */ 
-    nb_ports = rte_eth_dev_count();
-
-    if(nb_ports < 2)
-        rte_exit(EXIT_FAILURE, 
-            "Not enough Ethernet ports (%d) available\n",
-            nb_ports);
     
-    for(port = 0 ; port < nb_ports ; port++){
-        if( (sfcapp_enabled_port_mask & (1<<port)) == 0)
-            continue;
-        
-        printf("Configuring port %u...\n",(unsigned) port);
-        ret = init_port(port,sfcapp_pktmbuf_pool);
+    ret = init_port(sfcapp_cfg.rx_port);
+    if(ret < 0)
+        rte_exit(EXIT_FAILURE,"Failed to setup RX port.\n");
 
-        if(ret < 0)
-            rte_exit(EXIT_FAILURE,"Port configuration failed...\n");
-    }
-
+    ret = init_port(sfcapp_cfg.tx_port);
+    if(ret < 0)
+        rte_exit(EXIT_FAILURE,"Failed to setup TX port.\n");
+    
     /* Assign one lcore for RX/TX and another for encap/decap tasks
      * Only one queue per port will be used.
      */
