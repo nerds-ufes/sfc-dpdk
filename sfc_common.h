@@ -19,6 +19,7 @@ struct sfcapp_config {
     uint8_t rx_port;
     uint8_t tx_port;
     enum sfcapp_type type;
+    
 };
 
 #endif

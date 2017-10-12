@@ -33,7 +33,6 @@ proxy_init(){
 
 int
 proxy_main_loop(__attribute__((unused)) void *nothing){
-
 }
 
 
