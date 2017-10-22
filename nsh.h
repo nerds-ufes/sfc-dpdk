@@ -26,14 +26,24 @@ struct nsh_spi {
 
 
 /* Encapsulates the packet in pkt_mbuf in NSH header with
- * NSH parameters given by service_header arg.
+ * NSH parameters given by nsh_hdr. This app considers that
+ * NSH packets don't contain metadata
  */
-void nsh_encap(rte_mbuf* pkt_mbuf, uint32_t service_header);
+void nsh_encap(rte_mbuf* pkt_mbuf, uint64_t nsh_hdr);
 
-/* Desencapsulates the packet in pkt_mbuf, removing the NSH
- * header and returning a pointer to the removed header.
+/* Decapsulates the packet in pkt_mbuf, removing the NSH
+ * header.
  */
-rte_mbuf* nsh_decap(rte_mbuf* pkt_mbuf);
+void nsh_decap(struct rte_mbuf* pkt_mbuf);
 
-void nsh_dec_si(rte_mbuf* pkt_mbuf);
+/* Decrements the value of SI in a NSH encapsulated packet.
+ * Returns -1 in case o failure.
+ */
+int nsh_dec_si(struct rte_mbuf* pkt_mbuf);
+
+/* Copies the nsh header info contained in mbuf to nsh_hdr.
+ * Returns -1 in case of failure.
+ */ 
+int nsh_get_header(struct rte_mbuf *mbuf, uint64_t *nsh_hdr);
+
 #endif

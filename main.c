@@ -7,31 +7,19 @@
 #include <rte_ethdev.h>
 #include <rte_lcore.h>
 
+#include "sfc_common.h"
+#include "sfc_classifier.h"
+#include "sfc_proxy.h"
+#include "sfc_forwarder.h"
 
-#define MEMPOOL_CACHE_SIZE 256
 
-#define NB_MBUF 4096 /* I might change this value later*/
-#define NB_RX_QS 1
-#define NB_TX_QS 1
-#define NB_RX_DESC 128
-#define NB_TX_DESC 128
-#define BURST_SIZE 8
-
-#define INTERCORE_RING_SIZE 64
-
-/* Remove later*/
+/* Remove later */
 int n_rx=0, n_tx=0;
 
 static uint8_t nb_ports;
 struct sfcapp_config sfcapp_cfg;
 
 char cfg_filename[64];
-
-#ifdef SFCAPP_MULTICORE
-/*Rings for intercore communication*/
-static struct rte_ring *rx_ring;
-static struct rte_ring *tx_ring;
-#endif
 
 static struct rte_mempool *sfcapp_pktmbuf_pool;
 
@@ -55,19 +43,19 @@ static void sfcapp_assoc_ports(int portmask){
     int count = 2; /* We'll only setup 2 ports */
 
     nb_ports = rte_eth_dev_count();
-    if(nb_port < 2)
+    if(nb_ports < 2)
         rte_exit(EXIT_FAILURE,"Not enough ports! 2 needed.\n");
 
-    for(i = 0 ; i < nb_ports && c > 0 ; i++, c--){
-        if(portmask & (1 << i) == 0)
+    for(i = 0 ; i < nb_ports && count > 0 ; i++, count--){
+        if((portmask & (1 << i)) == 0)
             continue;
     
         switch(count){
             case 2:
-                sfcapp_cfg.rx_port = i;
+                sfcapp_cfg.port1 = i;
                 break;
             case 1:
-                sfcapp_cfg.tx_port = i;
+                sfcapp_cfg.port2 = i;
                 break;
             default:
                 break;
@@ -118,7 +106,7 @@ parse_args(int argc, char **argv){
                 if(pm < 0)
                     rte_exit(EXIT_FAILURE,"Failed to parse portmask\n");
                 else
-                    setup_ports(pm);
+                    sfcapp_assoc_ports(pm);
                 break;
             case 't':
                 break;
@@ -230,39 +218,24 @@ init_port(uint8_t port, struct rte_mempool *mbuf_pool){
 
 }
 
-#ifdef SFCAPP_MULTICORE //To be used in the future when I implement processing with 2 lcores
-static int
-init_rings(){
-
-    unsigned flags = RING_F_SC_DEQ | RING_F_SP_ENQ;
-    
-    rx_ring = rte_ring_create("rx_ring",INTERCORE_RING_SIZE,
-                rte_socket_id(),flags);
-
-    tx_ring = rte_ring_create("tx_ring",INTERCORE_RING_SIZE,
-                rte_socket_id(),flags);
-    
-    if(rx_ring == NULL || tx_ring == NULL)
-        return -1;
-    
-    return 0;
-}
-#endif
-
-int init_app(){
+static int 
+init_app(void) {
+    int ret=0;
 
     /* Parse config file and init app*/
     switch(sfcapp_cfg.type){
         case SFC_CLASSIFIER:
-            classifier_init(cfg_filename);
+            ret = classifier_setup(cfg_filename);
             break;
         case SFC_FORWARDER:
-            forwarder_init(cfg_filename);
+            ret = forwarder_setup(cfg_filename);
             break;
         case SFC_PROXY:
-            proxy_init(cfg_filename);
+            ret = proxy_setup(cfg_filename);
             break;
     }
+
+    return ret;
 }
 
 static __attribute__((noreturn)) void 
@@ -297,9 +270,8 @@ main_loop(void) {
 int 
 main(int argc, char **argv){
 
-    int ret;
+    int ret=0;
     int nb_lcores;
-    uint8_t port;
 
     ret = rte_eal_init(argc,argv);
     if(ret < 0)
@@ -316,38 +288,26 @@ main(int argc, char **argv){
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
-    /* setup match table */
- 
-    #ifdef SFCAPP_MULTICORE
-    /* Setup rings for communication between cores.
-     * lcore 0 writes received packets to rx_ring
-     * lcore 1 reads packets from rx_ring and executes encap/decap
-     * lcore 1 writes packets to tx_ring, for transmission
-     * lcore 0 reads packets from tx_ring and sends them
-     */
-    ret = init_rings();
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Failed to setup internal communication rings.\n");
-    #endif
-    
-    ret = init_port(sfcapp_cfg.rx_port);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Failed to setup RX port.\n");
+    ret = init_port(sfcapp_cfg.port1,sfcapp_pktmbuf_pool);
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to setup RX port.\n");
 
-    ret = init_port(sfcapp_cfg.tx_port);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Failed to setup TX port.\n");
-    
+    ret = init_port(sfcapp_cfg.port2,sfcapp_pktmbuf_pool);
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to setup TX port.\n");
+
+    /* Init TX buffer */
+    /*ret = rte_eth_tx_buffer_init(&sfcapp_cfg.tx_buffer,BURST_SIZE);
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer.\n");
+    */
+
     nb_lcores = rte_lcore_count();
-    if(nb_lcores < 1)
-        rte_exit(EXIT_FAILURE,"Not enough lcores! At least 1
-         needed.\n");
+    SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
 
     /* Read config files and setup app*/    
-    init_app();
-
+    ret = init_app();
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to init app\n");
+        
     /* Start app (single core) */
-    sfcapp_cfg.main_loop();
+    (sfcapp_cfg.main_loop)();
 
     return 0;
 }
