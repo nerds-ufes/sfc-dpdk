@@ -18,8 +18,8 @@ echo "Done."
 
 # Create ovs database
 echo "Creating ovs database..."
-$OVS_DIR/ovsdb/ovsdb-tool create /usr/local/etc/openvswitch/conf.db \
-/usr/share/openvswitch/vswitch.ovsschema
+ovsdb-tool create /usr/local/etc/openvswitch/conf.db \
+	$OVS_DIR/vswitchd/vswitch.ovsschema
 sleep 1
 echo "Done."
 
@@ -28,23 +28,24 @@ echo "Done."
 # Start ovsdb-server
 echo "Starting ovsdb server..."
 DB_SOCK=/usr/local/var/run/openvswitch/db.sock
-$OVS_DIR/ovsdb/ovsdb-server --remote=punix:$DB_SOCK \
-          --remote=db:Open_vSwitch,Open_vSwitch,manager_options \
-          --pidfile --detach &
+ovsdb-server \
+			--remote=punix:$DB_SOCK \
+      --remote=db:Open_vSwitch,Open_vSwitch,manager_options \
+      --pidfile --detach &
 sleep 1
 echo "Done."
 
 ###################################
 
 echo "Starting OVS..."
-$OVS_DIR/utilities/ovs-vsctl --no-wait init
-$OVS_DIR/utilities/ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0xf
-$OVS_DIR/utilities/ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-socket-mem=2048,0
-$OVS_DIR/utilities/ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-init=true
+ovs-vsctl --no-wait init
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0xf
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-socket-mem=2048,0
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-init=true
 
 #Turn on daemon
-$OVS_DIR/vswitchd/ovs-vswitchd \
-	 -- unix:$DB_SOCK \
+ovs-vswitchd \
+#	 	 --unix:$DB_SOCK \
      --pidfile \
      --detach \
      --log-file=/usr/local/var/log/openvswitch/ovs-vswitchd.log
@@ -55,28 +56,28 @@ $OVS_DIR/vswitchd/ovs-vswitchd \
 # Configure bridge
 
 echo "Configuring bridge and ports..."
-$OVS_DIR/utilities/ovs-vsctl --no-wait add-br br0 -- set bridge br0 datapath_type=netdev
+ovs-vsctl --no-wait add-br br0 -- set bridge br0 datapath_type=netdev
 sleep 1
 
 # Add ports
 
-$OVS_DIR/utilities/ovs-vsctl --no-wait add-port br0 vhost-user1 -- set Interface vhost-user1 type=dpdkvhostuser
+ovs-vsctl --no-wait add-port br0 vhost-user1 -- set Interface vhost-user1 type=dpdkvhostuser
 echo "Finished configuring vhostuser port 1"
 sleep 1
 
-$OVS_DIR/utilities/ovs-vsctl --no-wait add-port br0 vhost-user2 -- set Interface vhost-user2 type=dpdkvhostuser
+ovs-vsctl --no-wait add-port br0 vhost-user2 -- set Interface vhost-user2 type=dpdkvhostuser
 sleep 1
 
-$OVS_DIR/utilities/ovs-vsctl --no-wait add-port br0 vhost-user3 -- set Interface vhost-user3 type=dpdkvhostuser
+ovs-vsctl --no-wait add-port br0 vhost-user3 -- set Interface vhost-user3 type=dpdkvhostuser
 echo "Finished configuring vhostuser port 2"
 sleep 1
 
 # Create mirror port to analyze packets with Wireshark
-$OVS_DIR/utilities/ovs-vsctl add-port br0 tap1 \
+:'ovs-vsctl add-port br0 tap1 \
     -- --id=@p get port tap1 \
     -- --id=@m create mirror name=m0 select-all=true output-port=@p \
     -- set bridge br0 mirrors=@m
-
+'
 ## At this point, the vhost-user socket will be located at /usr/local/var/run/openvswitch/<vhost port name>
 ## This is important to set up the VM on next step
 echo "Done."

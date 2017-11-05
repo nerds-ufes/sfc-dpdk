@@ -1,7 +1,7 @@
 ###### Check if DPDK vars are set ######
 
 : ${RTE_SDK:?"Please set 'RTE_SDK' before running this script."}
-: ${RTE_TARGET:?"{Please set 'RTE_TARGET' before running this script."}
+: ${RTE_TARGET:?"Please set 'RTE_TARGET' before running this script."}
 
 ###### Setup hugepages ######
 
