@@ -30,7 +30,7 @@ qemu-system-x86_64 \
  -monitor unix:/tmp/vm_2monitor,server,nowait \
  -chardev socket,id=char2,path=/usr/local/var/run/openvswitch/vhost-user2 \
  -netdev type=vhost-user,id=mynet2,chardev=char2,vhostforce \
- -device virtio-net-pci,mac=00:00:00:00:00:01,netdev=mynet2,id=net2 \
+ -device virtio-net-pci,mac=00:00:00:00:00:02,netdev=mynet2,id=net2 \
  -object memory-backend-file,id=mem,size=2048M,mem-path=/mnt/huge,share=on \
  -numa node,memdev=mem -mem-prealloc &
 
