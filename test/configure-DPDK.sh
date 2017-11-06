@@ -13,12 +13,12 @@ if [ ! -d $huge_dir ]; then
 fi
 
 # Mount 1GB hugepages
-#echo 8 > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
-#mount -t hugetlbfs -o pagesize=1G none $huge_dir
+echo 8 > /sys/kernel/mm/hugepages/hugepages-1048576kB/nr_hugepages
+mount -t hugetlbfs -o pagesize=1G none $huge_dir
 
-# Mount 1GB hugepages
-echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
-mount -t hugetlbfs -o pagesize=2M none $huge_dir
+# Mount 2MB hugepages
+#echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+#mount -t hugetlbfs -o pagesize=2M none $huge_dir
 
 ###### Insert DPDK driver module ######
 
@@ -32,4 +32,4 @@ fi
 
 ###### Bind interfaces to DPDK ######
 #$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:02:00.0
-$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:00:08.0
+#$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:00:08.0

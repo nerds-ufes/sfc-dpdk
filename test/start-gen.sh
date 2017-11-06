@@ -1,4 +1,8 @@
 # This script starts the VM using qemu, OvS and DPDK
+if [ -z $VM_DIR ]; then
+	echo "Variable VM_DIR not set."
+	exit 1
+fi
 
 usage="Usage:\n $0 VM_DISK_FILE VM_ID(#)"
 
@@ -17,10 +21,10 @@ echo "Starting Generator..."
 qemu-system-x86_64 \
  -cpu host \
  -boot c \
- -hda SFC-Generator.img \
+ -drive file=$VM_DIR/SFC-Generator.img,media=disk,format=raw \
  -m 2048M \
  -smp cores=4 \
- --enable-kvm -name VM1 \
+ --enable-kvm -name Generator \
  -vnc :1 -pidfile /tmp/vm_1.pid \
  -drive file=fat:rw:/tmp/qemu_share1,snapshot=off \
  -monitor unix:/tmp/vm_1monitor,server,nowait \
