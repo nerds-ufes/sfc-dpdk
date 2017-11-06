@@ -39,16 +39,15 @@ echo "Done."
 
 echo "Starting OVS..."
 ovs-vsctl --no-wait init
-ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0xf
-ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-socket-mem=2048,0
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0x3
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-socket-mem=512,0
 ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-init=true
 
 #Turn on daemon
 ovs-vswitchd \
-#	 	 --unix:$DB_SOCK \
      --pidfile \
      --detach \
-     --log-file=/usr/local/var/log/openvswitch/ovs-vswitchd.log
+     --log-file=/usr/local/var/log/openvswitch/ovs-vswitchd.log &
 
 ###################################
 
