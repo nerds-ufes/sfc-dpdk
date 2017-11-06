@@ -7,7 +7,7 @@
 #include <rte_ethdev.h>
 #include <rte_lcore.h>
 
-#include "sfc_common.h"
+#include "common.h"
 #include "sfc_classifier.h"
 #include "sfc_proxy.h"
 #include "sfc_forwarder.h"

@@ -1,4 +1,4 @@
-export OVS_DIR=/usr/src/openvswitch-2.8.0
+export OVS_DIR=/home/mscastanho/openvswitch-2.8.0
 export RTE_TARGET=x86_64-native-linuxapp-gcc
-export RTE_SDK=/usr/src/dpdk-17.05.2
+export RTE_SDK=/home/mscastanho/dpdk-17.05.2
 

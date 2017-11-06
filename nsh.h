@@ -17,7 +17,6 @@ struct nsh_hdr {
     uint8_t md_type;
     uint8_t next_proto;
     uint32_t serv_path;
-    uint32_t *context; /* What type should I use for this? */
 } __attribute__((__packed__));
 
 struct nsh_spi {

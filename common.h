@@ -48,7 +48,7 @@ struct rte_cfgfile_parameters sfcapp_cfgfile_parameters = {
     .comment_character = '#'
 };
 
-void send_packet(struct rte_mbuf *mbufs, uint8_t tx_port);
+uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint16_t nb_pkts);
 
 void ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
     struct ipv4_5tuple *tuples);

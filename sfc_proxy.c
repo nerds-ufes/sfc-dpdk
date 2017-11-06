@@ -197,10 +197,10 @@ void proxy_update_macs(struct rte_mbuf *mbuf, struct ether_addr *dst_mac){
  * - Adding the corresponding SF MAC address
  * 
  * It handles packets in bulks. This can be further optimized by
- * using other DPDK bulk operations
+ * using other DPDK bulk operations.
  */ 
-void proxy_handle_inbound_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
-    uint64_t drop_mask){
+void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
+    uint64_t *drop_mask){
 
     uint64_t nsh_header;
     uint32_t nsh_path_info;
@@ -209,8 +209,7 @@ void proxy_handle_inbound_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     struct ether_addr sf_mac;
     int i, lkp;
 
-    drop_hitmask = 0;
-    ret = 0;
+    *drop_mask = 0;
 
     ipv4_get_5tuple_bulk(mbufs,nb_pkts,ip_5tuples);
     
@@ -238,18 +237,20 @@ void proxy_handle_inbound_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         lkp = rte_hash_lookup_data(&proxy_sf_address_lkp_table, (void *) &nsh_path_info,
                 (void **) &sf_mac);
 
-        if( unlikely(lkp == 0) ){
+        // Currently not dropping packets
+        /*if( unlikely(lkp < 0) ){
             *drop_mask |= 1<<i;
             continue;
-        }
+        }*/
 
         /* Update src and dst MAC */ 
         proxy_update_macs(mbufs[i],&sf_mac);
-
-        /* Packet should be transmitted to SFs (port2)*/
-        send_packet(mbufs[i],sfcapp_cfg.port2);
-        
     }
+}
+
+void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
+    uint64_t *drop_mask){
+
 }
 
 void proxy_main_loop(void){
@@ -276,36 +277,21 @@ void proxy_main_loop(void){
         rte_eth_rx_burst(sfcapp_cfg.port1,0,
             rx_pkts,BURST_SIZE);
 
-        /* Process and decap packets from network*/
-        proxy_handle_inbound_bulk(rx_pkts,nb_rx,&drop_mask);
+        /* Process and decap received packets*/
+        proxy_handle_inbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
-        /* No packets were dropped. Send in bulk. */
-        if(likely(drop_mask == 0))
-            sfcapp_send_packets(rx_pkts,nb_rx);
-        else{
-            sfcapp_send_packet(rx_pkts[i])
-        }
-
-
-        nb_tx = rte_eth_tx_burst(sfcapp_cfg.port2,0,
-            rx_pkts,nb_rx);
-
-        if(unlikely(nb_tx < nb_rx)){
-            uint16_t buf;
-            for(buf = nb_tx ; buf < nb_rx ; buf++)
-                rte_pktmbuf_free(rx_pkts[buf]);
-        }
+        /* TODO: Only send packets not marked for dropping */
+        send_pkts(rx_pkts,sfcapp_cfg.port2,0,rx_pkts);
 
         /* Receive packets from SFs */
         rte_eth_rx_burst(sfcapp_cfg.port2,0,
             rx_pkts,BURST_SIZE);
 
         /* Process and encap packets from SFs */
-        proxy_handle_outbound_bulk(rx_pkts,nb_rx,&drop_mask);
+        proxy_handle_outbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
-
-    /* Clean unsent packets*/        
-
+        /* TODO: Only send packets not marked for dropping  */
+        send_pkts(rx_pkts,sfcapp_cfg.port1,0,rx_pkts);  
     }
 }
 

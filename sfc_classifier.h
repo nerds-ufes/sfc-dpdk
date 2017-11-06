@@ -11,11 +11,11 @@
 /* static rte_hash* classifier_sfp_lkp_table */
 /* key = spi (nsh_spi) ; value = chain length (uint8_t) */
 
-int classifier_init(char** cfg_filename);
+int classifier_setup(char* cfg_filename);
 
 /* static classifier_parse_config_file(char** cfg_filename); */
 
-static __attribute__((noreturn)) void 
+__attribute__((noreturn)) void 
 classifier_main_loop(void);
 
 
