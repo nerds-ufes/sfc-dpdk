@@ -225,10 +225,10 @@ init_app(void) {
     /* Parse config file and init app*/
     switch(sfcapp_cfg.type){
         case SFC_CLASSIFIER:
-            ret = classifier_setup(cfg_filename);
+            //ret = classifier_setup(cfg_filename);
             break;
         case SFC_FORWARDER:
-            ret = forwarder_setup(cfg_filename);
+            //ret = forwarder_setup(cfg_filename);
             break;
         case SFC_PROXY:
             ret = proxy_setup(cfg_filename);

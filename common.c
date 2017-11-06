@@ -1,6 +1,9 @@
 ﻿#include <stdlib.h>
 
 #include <rte_ether.h>
+#include <rte_ip.h>
+#include <rte_tcp.h>
+#include <rte_udp.h>
 #include <rte_ethdev.h>
 #include <rte_mbuf.h>
 
@@ -15,8 +18,8 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint
         mbufs,nb_pkts);
 
     if(unlikely(nb_tx < nb_pkts)){
-        for(buf = nb_tx ; buf < nb_rx ; buf++)
-            rte_pktmbuf_free(rx_pkts[buf]);
+        for(buf = nb_tx ; buf < nb_pkts ; buf++)
+            rte_pktmbuf_free(mbufs[buf]);
     }
 
     return nb_tx;
@@ -38,8 +41,8 @@ void ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         
         curr_tuple = &tuples[i];
 
-        ether_hdr = rte_pktmbuf_mtod(mbufs[i], struct ether_hdr *);
-        eth_type = rte_be_to_cpu_16(ether_addr->ether_type);
+        eth_hdr = rte_pktmbuf_mtod(mbufs[i], struct ether_hdr *);
+        eth_type = rte_be_to_cpu_16(eth_hdr->ether_type);
         
         if(eth_type == ETHER_TYPE_IPv4){
             ipv4_hdr = (struct ipv4_hdr *) (eth_hdr + sizeof(struct ether_hdr));
@@ -65,4 +68,8 @@ void ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts,
             ;/* Currently only treating IPv4 payloads*/
         }
     }
+}
+
+void common_mac_swap(struct rte_mbuf *mbuf){
+    mbuf+=1;
 }
