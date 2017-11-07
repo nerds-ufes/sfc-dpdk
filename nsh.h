@@ -43,6 +43,6 @@ int nsh_dec_si(struct rte_mbuf* pkt_mbuf);
 /* Copies the nsh header info contained in mbuf to nsh_hdr.
  * Returns -1 in case of failure.
  */ 
-int nsh_get_header(struct rte_mbuf *mbuf, uint64_t *nsh_hdr);
+int nsh_get_header(struct rte_mbuf *mbuf, struct nsh_hdr *nsh_info);
 
 #endif

@@ -205,29 +205,34 @@ static void proxy_update_macs(struct rte_mbuf *mbuf, struct ether_addr *dst_mac)
 static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
     uint64_t *drop_mask){
 
-    uint64_t nsh_header;
+    struct nsh_hdr nsh_header;
     uint32_t nsh_path_info;
     struct ipv4_5tuple ip_5tuples[BURST_SIZE];
     const void *tuple_ptrs[BURST_SIZE];
     int32_t vals[BURST_SIZE];
     struct ether_addr sf_mac;
     int i, lkp;
-
+    static counter = 0;
     *drop_mask = 0;
 
-    ipv4_get_5tuple_bulk(mbufs,nb_pkts,ip_5tuples);
+   // ipv4_get_5tuple_bulk(mbufs,nb_pkts,ip_5tuples);
     
-    for(i = 0 ; i < nb_pkts ; i++)
-        tuple_ptrs[i] = &ip_5tuples[i];
+   // for(i = 0 ; i < nb_pkts ; i++)
+     //   tuple_ptrs[i] = &ip_5tuples[i];
 
     /* Check if flow info is already stored in table */
-    rte_hash_lookup_bulk(proxy_flow_header_lkp_table,tuple_ptrs,
-            nb_pkts,vals);
+    //rte_hash_lookup_bulk(proxy_flow_header_lkp_table,tuple_ptrs,
+      //      nb_pkts,vals);
             
     for(i = 0; i < nb_pkts ; i++){
 
-        nsh_get_header(mbufs[i],&nsh_header);
+	//rte_pktmbuf_dump(stdout,mbufs[i],112);
 
+	/* I SHOULD GET THE HEADER WITHOUT CALLING OTHER FUNCTION, TO AVOID COPYING STUFF AROUND.
+	   OR CAN I JUST CAST IT SOMEHOW? THINK ABOUT IT
+	*/
+        nsh_get_header(mbufs[i],&nsh_header);
+	printf("SPI+SI: %08" PRIx32 "\n",nsh_header.serv_path);
         /* Flow not mapped yet in table. Let's add it */
         if(unlikely(vals[i] < 0)){
              rte_hash_add_key_data(proxy_flow_header_lkp_table,
@@ -235,24 +240,29 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         }
 
         /* Decapsulate packet */
-        nsh_decap(mbufs[i]);
+        //nsh_decap(mbufs[i]);
     
         /* Get only low part of from 64B header*/
-        nsh_path_info = (uint32_t) nsh_header;
+        //nsh_path_info = (uint32_t) nsh_header;
         
         /* Get SF MAC address from table */
-        lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table, (void *) &nsh_path_info,
-                (void **) &sf_mac);
+        //lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table, (void *) &nsh_path_info,
+          //      (void **) &sf_mac);
 
         // Currently not dropping packets
-        if( unlikely(lkp < 0) ){
-            *drop_mask |= 1<<i;
-            continue;
-        }
+        //if( unlikely(lkp < 0) ){
+          //  *drop_mask |= 1<<i;
+           // continue;
+       // }
 
         /* Update src and dst MAC */ 
         proxy_update_macs(mbufs[i],&sf_mac);
+ 	counter++;
     }
+   
+     if(counter > 100)
+	rte_exit(EXIT_SUCCESS,"MY CREATION WORKS!!\n");
+
 }
 
 /*static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
@@ -284,11 +294,11 @@ void proxy_main_loop(void){
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,
                      rx_pkts,BURST_SIZE);
 
-        /* Process and decap received packets*/
+	/* Process and decap received packets*/
         proxy_handle_inbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping */
-        send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);
+ //       send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);
 
         /* Receive packets from SFs */
         rte_eth_rx_burst(sfcapp_cfg.port2,0,
@@ -298,7 +308,7 @@ void proxy_main_loop(void){
         //proxy_handle_outbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping  */
-        send_pkts(rx_pkts,sfcapp_cfg.port1,0,nb_rx);  
+ //       send_pkts(rx_pkts,sfcapp_cfg.port1,0,nb_rx);  
     }
 }
 

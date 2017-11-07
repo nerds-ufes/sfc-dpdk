@@ -84,8 +84,9 @@ echo "Done."
 
 # Show configured bridge and ports.
 
-$OVS_DIR/utilities/ovs-vsctl show
+ovs-vsctl show
 
 ###################################
 
+ovs-ofctl add-flow br0 action=NORMAL
 echo "OvS Configuration Finished."

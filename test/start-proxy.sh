@@ -4,16 +4,6 @@ if [ -z $VM_DIR ]; then
 	exit 1
 fi
 
-usage="Usage:\n $0 VM_DISK_FILE VM_ID(#)"
-
-:'if [ "$#" -ne 2 ] || ! [ -f $1 ] || ! [[ $2 =~ ^[0-9]+$ ]]; then
-    echo $usage
-    exit(1) 
-else
-    file=$1
-    id=$2
-fi'
-
 rm -d /tmp/qemu_share2
 mkdir /tmp/qemu_share2
 
