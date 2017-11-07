@@ -30,7 +30,8 @@ struct ipv4_5tuple {
 enum sfcapp_type {
     SFC_PROXY,
     SFC_CLASSIFIER,
-    SFC_FORWARDER
+    SFC_FORWARDER,
+    NONE
 };
 
 struct sfcapp_config {

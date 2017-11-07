@@ -80,6 +80,20 @@ parse_portmask(const char *portmask)
 	return pm;
 }
 
+static enum sfcapp_type
+parse_apptype(const char *type){
+    if(strcmp(type,"proxy") == 0)
+        return SFC_PROXY;
+    
+    if(strcmp(type,"classifier") == 0)
+        return SFC_CLASSIFIER;
+    
+    if(strcmp(type,"forwarder") == 0)
+        return SFC_FORWARDER;
+    
+    return NONE;
+}
+
 static const char sfcapp_options[] = {
     'p', /* Port mask */
     't', /* SFC entity type*/
@@ -98,6 +112,7 @@ parse_args(int argc, char **argv){
      */
     int sfcapp_opt;
     int pm;
+    enum sfcapp_type type;
 
     while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:")) != -1){
         switch(sfcapp_opt){
@@ -109,6 +124,11 @@ parse_args(int argc, char **argv){
                     sfcapp_assoc_ports(pm);
                 break;
             case 't':
+                type = parse_apptype(optarg);
+                if(type == NONE)
+                    rte_exit(EXIT_FAILURE,"Unrecognized type parameter.\n");
+                else
+                    sfcapp_cfg.type = type;
                 break;
             case 'f':
                 break;
@@ -233,6 +253,8 @@ init_app(void) {
         case SFC_PROXY:
             ret = proxy_setup(cfg_filename);
             break;
+        default:
+            rte_exit(EXIT_FAILURE,"Application type not recognized.\n");
     }
 
     return ret;
