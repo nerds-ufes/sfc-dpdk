@@ -70,6 +70,16 @@ void ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     }
 }
 
-void common_mac_swap(struct rte_mbuf *mbuf){
-    mbuf+=1;
+void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *dest){
+    struct ether_hdr *eth_hdr;
+
+    eth_hdr = rte_pktmbuf_mtod(mbuf,struct ether_hdr *);
+
+    ether_addr_copy(&eth_hdr->d_addr,&eth_hdr->s_addr);
+    ether_addr_copy(dest,&eth_hdr->d_addr);
+}
+
+void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg){
+    printf("%s",msg);
+    rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
 }

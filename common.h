@@ -54,6 +54,8 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint
 void ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
     struct ipv4_5tuple *tuples);
 
-void common_mac_swap(struct rte_mbuf *mbuf);
+void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *dest);
+
+void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg);
 
 #endif
