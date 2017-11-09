@@ -116,7 +116,7 @@ static int proxy_init_sf_addr_table(void){
         .name = "proxy_sf_addr",
         .entries = PROXY_MAX_FUNCTIONS,
         .reserved = 0,
-        .key_len = sizeof(uint16_t), 
+        .key_len = sizeof(uint32_t), 
         .hash_func = rte_jhash,
         .hash_func_init_val = 0,
         .socket_id = rte_socket_id()
@@ -152,10 +152,17 @@ static int proxy_init_sf_addr_table(void){
 int proxy_setup(char *cfg_filename){
 
     int ret = 0;
-    uint16_t sfid_stub1 = 1;
-    struct ether_addr mac_stub1 = {{0xFF,0xEE,0xDD,0xCC,0xBB,0xAA}};
-    uint16_t sfid_stub2 = 2;
-    struct ether_addr mac_stub2 = {{0xAA,0xBB,0xCC,0xDD,0xEE,0xFF}};
+    uint32_t sfid_stub1 = 0x0003E8FF;
+    struct ether_addr mac_stub1;
+    uint32_t sfid_stub2 = 2;
+    struct ether_addr mac_stub2 = {{0x02,0x02,0x02,0x02,0x02,0x02}};
+
+    mac_stub1.addr_bytes[0] = 0x01;
+    mac_stub1.addr_bytes[1] = 0x01;
+    mac_stub1.addr_bytes[2] = 0x01;
+    mac_stub1.addr_bytes[3] = 0x01;
+    mac_stub1.addr_bytes[4] = 0x01;
+    mac_stub1.addr_bytes[5] = 0x01;
 
     ret = proxy_init_flow_hdr_table();
     SFCAPP_CHECK_FAIL_LT(ret,0,
@@ -169,27 +176,15 @@ int proxy_setup(char *cfg_filename){
     printf("%s\n",cfg_filename);
     /*proxy_parse_config_file(cfg_filename);*/
 
-    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub1, (void *) &mac_stub1);
+    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub1, (void *) common_mac_to_64(&mac_stub1));
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
-    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub2, (void *) &mac_stub2);
+    printf("Pointer to mac_stub1: %" PRIx64 "\n",(uint64_t)&mac_stub1);
+    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub2, (void *) common_mac_to_64(&mac_stub2));
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 2.\n");
     
     sfcapp_cfg.main_loop = proxy_main_loop;
 
     return 0;
-}
-
-
-static void proxy_update_macs(struct rte_mbuf *mbuf, struct ether_addr *dst_mac){
-
-    struct ether_hdr *eth_hdr;
-
-    /* Swap src and dst */
-    common_mac_swap(mbuf);
-
-    /* Set packet's destination MAC as dst_mac */
-    eth_hdr = rte_pktmbuf_mtod(mbuf, struct ether_hdr *);
-    ether_addr_copy(dst_mac,&eth_hdr->d_addr);    
 }
 
 /* This function does all the processing on packets coming from 
@@ -206,15 +201,21 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     uint64_t *drop_mask){
 
     struct nsh_hdr nsh_header;
-    uint32_t nsh_path_info;
     struct ipv4_5tuple ip_5tuples[BURST_SIZE];
     const void *tuple_ptrs[BURST_SIZE];
     int32_t vals[BURST_SIZE];
+    uint64_t sf_mac_64;
     struct ether_addr sf_mac;
     int i, lkp;
-    static counter = 0;
     *drop_mask = 0;
+    char mac[64];
 
+    sf_mac.addr_bytes[0] = 0x00;
+    sf_mac.addr_bytes[1] = 0x00;
+    sf_mac.addr_bytes[2] = 0x00;
+    sf_mac.addr_bytes[3] = 0x00;
+    sf_mac.addr_bytes[4] = 0x00;
+    sf_mac.addr_bytes[5] = 0x00;
    // ipv4_get_5tuple_bulk(mbufs,nb_pkts,ip_5tuples);
     
    // for(i = 0 ; i < nb_pkts ; i++)
@@ -226,13 +227,12 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
             
     for(i = 0; i < nb_pkts ; i++){
 
-	//rte_pktmbuf_dump(stdout,mbufs[i],112);
+	    //rte_pktmbuf_dump(stdout,mbufs[i],112);
 
-	/* I SHOULD GET THE HEADER WITHOUT CALLING OTHER FUNCTION, TO AVOID COPYING STUFF AROUND.
-	   OR CAN I JUST CAST IT SOMEHOW? THINK ABOUT IT
-	*/
         nsh_get_header(mbufs[i],&nsh_header);
-	printf("SPI+SI: %08" PRIx32 "\n",nsh_header.serv_path);
+        
+        //printf("SPI+SI: %08" PRIx32 "\n",nsh_header.serv_path);
+        
         /* Flow not mapped yet in table. Let's add it */
         if(unlikely(vals[i] < 0)){
              rte_hash_add_key_data(proxy_flow_header_lkp_table,
@@ -240,14 +240,12 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         }
 
         /* Decapsulate packet */
-        //nsh_decap(mbufs[i]);
-    
-        /* Get only low part of from 64B header*/
-        //nsh_path_info = (uint32_t) nsh_header;
+        nsh_decap(mbufs[i]);
         
         /* Get SF MAC address from table */
-        //lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table, (void *) &nsh_path_info,
-          //      (void **) &sf_mac);
+        lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table, 
+                (void *) &nsh_header.serv_path,
+                (void **) &sf_mac_64);
 
         // Currently not dropping packets
         //if( unlikely(lkp < 0) ){
@@ -255,14 +253,26 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
            // continue;
        // }
 
-        /* Update src and dst MAC */ 
-        proxy_update_macs(mbufs[i],&sf_mac);
- 	counter++;
-    }
-   
-     if(counter > 100)
-	rte_exit(EXIT_SUCCESS,"MY CREATION WORKS!!\n");
+       common_64_to_mac(sf_mac_64,&sf_mac);
 
+        printf("\n\n\nSF MAC from hashtable: %02" PRIx32 ":%02" PRIx32 ":%02" PRIx32
+        ":%02" PRIx32 ":%02" PRIx32 ":%02" PRIx32 "\n",
+        sf_mac.addr_bytes[0],
+        sf_mac.addr_bytes[1],
+        sf_mac.addr_bytes[2],
+        sf_mac.addr_bytes[3],
+        sf_mac.addr_bytes[4],
+        sf_mac.addr_bytes[5]);
+
+        printf("This is the servpath I used: %08" PRIx32 "\n",nsh_header.serv_path);
+        if(lkp == 0)
+            printf("Found it!!\n");
+
+        /* Update src and dst MAC */
+        common_dump_pkt(mbufs[i],"\n=== Full packet ===\n");
+        common_mac_update(mbufs[i],&sf_mac);
+        common_dump_pkt(mbufs[i],"\n=== Sent packet ===\n");
+    }
 }
 
 /*static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
@@ -298,7 +308,7 @@ void proxy_main_loop(void){
         proxy_handle_inbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping */
- //       send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);
+        //send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);
 
         /* Receive packets from SFs */
         rte_eth_rx_burst(sfcapp_cfg.port2,0,

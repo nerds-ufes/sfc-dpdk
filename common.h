@@ -58,4 +58,8 @@ void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *dest);
 
 void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg);
 
+inline uint64_t common_mac_to_64(struct ether_addr *mac);
+
+inline void common_64_to_mac(uint64_t val, struct ether_addr *mac);
+
 #endif

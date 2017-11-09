@@ -83,3 +83,23 @@ void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg){
     printf("%s",msg);
     rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
 }
+
+uint64_t common_mac_to_64(struct ether_addr *mac){
+
+    return (((uint64_t) mac->addr_bytes[5])<<40) | 
+           (((uint64_t) mac->addr_bytes[4])<<32) |
+           (((uint64_t) mac->addr_bytes[3])<<24) |
+           (((uint64_t) mac->addr_bytes[2])<<16) |
+           (((uint64_t) mac->addr_bytes[1])<<8)  |
+           (((uint64_t) mac->addr_bytes[0]))     |
+           (uint64_t) 0;
+}
+
+void common_64_to_mac(uint64_t val, struct ether_addr *mac){
+    mac->addr_bytes[0] = (uint8_t) (val);// & 0xFF);
+    mac->addr_bytes[1] = (uint8_t) (val>>8);// & 0xFF);
+    mac->addr_bytes[2] = (uint8_t) (val>>16);// & 0xFF);
+    mac->addr_bytes[3] = (uint8_t) (val>>24);// & 0xFF);
+    mac->addr_bytes[4] = (uint8_t) (val>>32);// & 0xFF);
+    mac->addr_bytes[5] = (uint8_t) (val>>40);// & 0xFF);
+}
