@@ -10,29 +10,50 @@
 
 extern struct rte_mempool *sfcapp_pktmbuf_pool;
 
-/*void nsh_encap(struct rte_mbuf* pkt_mbuf, uint64_t nsh_info){
-    struct ether_hdr *inner_eth_hdr;
-    struct nsh_hdr *nsh_hdr;
+void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info){
+    uint32_t i;
+    char *init_inner;
+    uint32_t tun_hdr_sz;
+    uint32_t offset;
+    uint32_t prev_sz;
+    struct nsh_hdr *nsh_header;
+    
+    printf("\n=== Full packet ===\n");
+    rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
 
-    nsh_hdr = rte_pktmbuf_mtod_offset(mbuf,struct ether_hdr *, 
-        sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
-        sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr) );
-    
-    // Does this work?
-    inner_eth_hdr = nsh_hdr + sizeof(struct nsh_hdr);
-    
-    // Append size of NSH header to end of packet
-    mbuf = rte_pktmbuf_append(mbuf,sizeof(struct nsh_hdr));
+    /* TODO: Check if packet is VXLAN or not */
+    if(!rte_pktmbuf_is_contiguous(mbuf))
+        rte_exit(EXIT_FAILURE,"Not contiguous!! Don't know what to do.\n");
+
+    prev_sz = mbuf->pkt_len;
+
+    offset = sizeof(struct nsh_hdr);
+
+    rte_pktmbuf_append(mbuf,offset);
 
     if(mbuf == NULL)
         rte_exit(EXIT_FAILURE,"Failed to encapsulate packet. Not enough room.\n");
-        
-    // Shift inner packet data to end
-    // HOW TO DO THIS???
+    
+    // Get pointer to end of inner packet data 
+    tun_hdr_sz = (sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) 
+        + sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr));
 
-    // Add NSH info
-    *nsh_hdr = nsh_info;  
-}*/
+    init_inner = (char*) mbuf->buf_addr + rte_pktmbuf_headroom(mbuf) + 
+        tun_hdr_sz;
+
+    // Shift inner packet right to free space for NSH header 
+    for(i = (int) prev_sz - 1 ; i >= tun_hdr_sz  ; i--)
+        init_inner[i+offset] = init_inner[i];    
+
+    nsh_header = rte_pktmbuf_mtod_offset(mbuf,struct nsh_hdr *,tun_hdr_sz);
+    nsh_header->basic_info  = nsh_info->basic_info;
+    nsh_header->md_type     = nsh_info->md_type;
+    nsh_header->next_proto  = nsh_info->next_proto;
+    nsh_header->serv_path   = nsh_info->serv_path;
+
+    printf("\n\n\n=== Decapped packet ===\n");
+    rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
+}
 
 void nsh_decap(struct rte_mbuf* mbuf){
     int i;
@@ -44,9 +65,6 @@ void nsh_decap(struct rte_mbuf* mbuf){
 
     if(!rte_pktmbuf_is_contiguous(mbuf))
         rte_exit(EXIT_FAILURE,"Not contiguous!! Don't know what to do.\n");
-
-    if(mbuf == NULL)
-        rte_exit(EXIT_FAILURE,"Failed to encapsulate packet. Not enough room.\n");
     
     /* Get pointer to beginning of inner packet data */
     init_new_inner = (char*) mbuf->buf_addr + rte_pktmbuf_headroom(mbuf) + 

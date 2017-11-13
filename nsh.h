@@ -28,7 +28,7 @@ struct nsh_spi {
  * NSH parameters given by nsh_hdr. This app considers that
  * NSH packets don't contain metadata
  */
-void nsh_encap(struct rte_mbuf* pkt_mbuf, uint64_t nsh_hdr);
+void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info);
 
 /* Decapsulates the packet in pkt_mbuf, removing the NSH
  * header.

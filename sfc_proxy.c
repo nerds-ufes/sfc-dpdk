@@ -9,10 +9,6 @@
 #include "nsh.h"
 #include "common.h"
 
-#define PROXY_MAX_FLOWS 1024
-#define PROXY_MAX_FUNCTIONS 64
-#define PROXY_CFG_SF_MAX_ENTRIES 2
-
 extern struct sfcapp_config sfcapp_cfg;
 
 static struct rte_hash *proxy_flow_header_lkp_table;
@@ -106,7 +102,7 @@ static int proxy_init_flow_hdr_table(void){
 
     if(proxy_flow_header_lkp_table == NULL)
         return -1;
-
+    
     return 0;
 }
 
@@ -201,44 +197,42 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     uint64_t *drop_mask){
 
     struct nsh_hdr nsh_header;
-    struct ipv4_5tuple ip_5tuples[BURST_SIZE];
-    const void *tuple_ptrs[BURST_SIZE];
-    int32_t vals[BURST_SIZE];
+    struct ipv4_5tuple tuple = { .proto = 0, .src_ip = 0, .dst_ip = 0, .src_port = 0, .dst_port = 0};
+    //struct ipv4_5tuple ip_5tuples[BURST_SIZE];
+    //struct ipv4_5tuple *tuple_ptrs[BURST_SIZE];
+    //int32_t vals[BURST_SIZE];
     uint64_t sf_mac_64;
     struct ether_addr sf_mac;
-    int i, lkp;
+    int i, lkp, ret;
     *drop_mask = 0;
-    char mac[64];
-
-    sf_mac.addr_bytes[0] = 0x00;
-    sf_mac.addr_bytes[1] = 0x00;
-    sf_mac.addr_bytes[2] = 0x00;
-    sf_mac.addr_bytes[3] = 0x00;
-    sf_mac.addr_bytes[4] = 0x00;
-    sf_mac.addr_bytes[5] = 0x00;
-   // ipv4_get_5tuple_bulk(mbufs,nb_pkts,ip_5tuples);
-    
-   // for(i = 0 ; i < nb_pkts ; i++)
-     //   tuple_ptrs[i] = &ip_5tuples[i];
 
     /* Check if flow info is already stored in table */
-    //rte_hash_lookup_bulk(proxy_flow_header_lkp_table,tuple_ptrs,
-      //      nb_pkts,vals);
-            
+    /*rte_hash_lookup_bulk(proxy_flow_header_lkp_table,(void **) tuple_ptrs,
+            nb_pkts,vals);
+    */
+
     for(i = 0; i < nb_pkts ; i++){
 
-	    //rte_pktmbuf_dump(stdout,mbufs[i],112);
+        //curr_tuple = &ip_5tuples[i];
 
+        //rte_pktmbuf_dump(stdout,mbufs[i],112);
+            
         nsh_get_header(mbufs[i],&nsh_header);
+
+        common_ipv4_get_5tuple(mbufs[i],&tuple);        
+
+        /* Check if flow info is already stored in table */
+        lkp = rte_hash_lookup(proxy_flow_header_lkp_table,&tuple);
+        
+        /* Flow not mapped yet in table. Let's add it */
+        /*if(unlikely(lkp < 0)){
+            printf("Adding flow!\n");
+            ret = rte_hash_add_key_data(proxy_flow_header_lkp_table,
+                &tuple, (void *) nsh_header);
+        }*/
         
         //printf("SPI+SI: %08" PRIx32 "\n",nsh_header.serv_path);
         
-        /* Flow not mapped yet in table. Let's add it */
-        if(unlikely(vals[i] < 0)){
-             rte_hash_add_key_data(proxy_flow_header_lkp_table,
-                &ip_5tuples[i],(void *) &nsh_header);
-        }
-
         /* Decapsulate packet */
         nsh_decap(mbufs[i]);
         
@@ -247,15 +241,16 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
                 (void *) &nsh_header.serv_path,
                 (void **) &sf_mac_64);
 
-        // Currently not dropping packets
-        //if( unlikely(lkp < 0) ){
-          //  *drop_mask |= 1<<i;
-           // continue;
-       // }
+        // Currently not droping packets
+        if( unlikely(lkp < 0) ){
+            *drop_mask |= 1<<i;
+            continue;
+        }
 
-       common_64_to_mac(sf_mac_64,&sf_mac);
+        // Convert hash data back to MAC
+        common_64_to_mac(sf_mac_64,&sf_mac);
 
-        printf("\n\n\nSF MAC from hashtable: %02" PRIx32 ":%02" PRIx32 ":%02" PRIx32
+        /*printf("\n\n\nSF MAC from hashtable: %02" PRIx32 ":%02" PRIx32 ":%02" PRIx32
         ":%02" PRIx32 ":%02" PRIx32 ":%02" PRIx32 "\n",
         sf_mac.addr_bytes[0],
         sf_mac.addr_bytes[1],
@@ -263,21 +258,23 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         sf_mac.addr_bytes[3],
         sf_mac.addr_bytes[4],
         sf_mac.addr_bytes[5]);
+        
 
         printf("This is the servpath I used: %08" PRIx32 "\n",nsh_header.serv_path);
-        if(lkp == 0)
+        if(lkp > 0)
             printf("Found it!!\n");
+        */
 
         /* Update src and dst MAC */
-        common_dump_pkt(mbufs[i],"\n=== Full packet ===\n");
+        //common_dump_pkt(mbufs[i],"\n=== Full packet ===\n");
         common_mac_update(mbufs[i],&sf_mac);
-        common_dump_pkt(mbufs[i],"\n=== Sent packet ===\n");
+        //common_dump_pkt(mbufs[i],"\n=== Sent packet ===\n");
     }
 }
 
 /*static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
     uint64_t *drop_mask){
-
+        mbufs+=1;
 }*/
 
 void proxy_main_loop(void){
@@ -304,7 +301,7 @@ void proxy_main_loop(void){
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,
                      rx_pkts,BURST_SIZE);
 
-	/* Process and decap received packets*/
+	    /* Process and decap received packets*/
         proxy_handle_inbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping */
