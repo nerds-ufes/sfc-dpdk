@@ -4,6 +4,7 @@
 #include <rte_jhash.h>
 #include <rte_cfgfile.h>
 #include <rte_ethdev.h>
+#include <rte_cfgfile.h>
 
 #include "sfc_proxy.h"
 #include "nsh.h"
@@ -17,7 +18,7 @@ static struct rte_hash *proxy_flow_header_lkp_table;
 static struct rte_hash *proxy_sf_address_lkp_table;
 /* key = SPI + SI (4B) ; value = ether_addr */
 
-/*static int proxy_parse_config_file(char* cfg_filename){
+static int proxy_parse_config_file(char* cfg_filename){
 
     struct rte_cfgfile *cfgfile;
     struct rte_cfgfile_entry entries[PROXY_CFG_SF_MAX_ENTRIES];
@@ -25,16 +26,15 @@ static struct rte_hash *proxy_sf_address_lkp_table;
     int nb_sections, nb_entries, i, j, ret;
     uint16_t sfid;
     struct ether_addr sf_mac;   
+    struct rte_cfgfile_parameters cfg_params = {.comment_character = '#'};
+    cfgfile = rte_cfgfile_load_with_params(cfg_filename,0,&cfg_params);
     
-
-    cfgfile = rte_cfgfile_load_with_params(cfg_filename,0,
-        sfcapp_cfgfile_params);
     if(cfgfile == NULL)
         rte_exit(EXIT_FAILURE,
             "Failed to load proxy config file\n");
+    
+    nb_sections = rte_cfgfile_num_sections(cfgfile,NULL,0);
 
-    nb_sections = rte_cfgfile_num_sections(cfgfile,sections,
-            PROXY_MAX_FUNCTIONS);
     if(nb_sections <= 0)
         rte_exit(EXIT_FAILURE,
             "Not enough sections in proxy config file\n");
@@ -61,14 +61,16 @@ static struct rte_hash *proxy_sf_address_lkp_table;
         if(nb_entries != PROXY_CFG_SF_MAX_ENTRIES)
             rte_exit(EXIT_FAILURE,
                 "Wrong number of entries for section %s, expecting %d.\n",
-                section[i],
+                sections[i],
                 PROXY_CFG_SF_MAX_ENTRIES);
 
         ret = rte_cfgfile_section_entries(cfgfile,sections[i],
-            entries,PROXY_CFG_SF_MAX_ENTRIES);
-        if(ret < 0)
-            rte_exit("Failed to parse entries in section %s during proxy" 
-                        "config file parsing.\n",sections[i]);
+                entries,PROXY_CFG_SF_MAX_ENTRIES);
+        if(ret < 0){
+            rte_exit(EXIT_FAILURE,
+                "Failed to parse entries in section %s during proxy" 
+                "config file parsing.\n",sections[i]);
+        }
         
         sfid = 0;
         
@@ -76,15 +78,27 @@ static struct rte_hash *proxy_sf_address_lkp_table;
         for(j = 0 ; j < nb_entries ; j++){
 
             //sfid
-            if(strcmp(entry->name,"sfid") == 0)
-                sfid = sfcapp_parse_uint16t(entry->value);
+            if(strcmp(entries[j].name,"sfid") == 0)
+                ret = common_parse_uint16(entries[j].value,&sfid);
 
-            if(strcmp(entry->name,"mac") == 0)
-                mac = sfcapp_parse_ether(entry->value);
+            if(strcmp(entries[j].name,"mac") == 0)
+                ret = common_parse_ether(entries[j].value,&sf_mac);
+            SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse mac addres from config file\n");
         }
+         
+        ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid, 
+                (void *) common_mac_to_64(&sf_mac));
+        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
+
+        char buf[ETHER_ADDR_FMT_SIZE + 1];
+        ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,&sf_mac);
+        printf("Successfully added <sfid=%" PRIu16 ",mac=%s> to proxy" 
+            " SF-address table.\n",sfid,buf);
+        
     }
 
-}*/
+    return ret;
+}
 
 static int proxy_init_flow_hdr_table(void){
 
@@ -170,7 +184,7 @@ int proxy_setup(char *cfg_filename){
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create next func hash table.\n");*/
 
     printf("%s\n",cfg_filename);
-    /*proxy_parse_config_file(cfg_filename);*/
+    proxy_parse_config_file(cfg_filename);
 
     ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub1, (void *) common_mac_to_64(&mac_stub1));
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
@@ -203,7 +217,7 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     //int32_t vals[BURST_SIZE];
     uint64_t sf_mac_64;
     struct ether_addr sf_mac;
-    int i, lkp, ret;
+    int i, lkp;
     *drop_mask = 0;
 
     /* Check if flow info is already stored in table */

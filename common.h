@@ -4,6 +4,9 @@
 #include <rte_cfgfile.h>
 #include <rte_ethdev.h>
 #include <rte_ether.h>
+#include <rte_ip.h>
+#include <rte_tcp.h>
+#include <rte_udp.h>
 
 #define MEMPOOL_CACHE_SIZE 256
 
@@ -25,7 +28,7 @@ struct ipv4_5tuple {
     uint16_t dst_ip;
     uint8_t  src_port;
     uint8_t  dst_port;
-};
+} __attribute__((__packed__));
 
 enum sfcapp_type {
     SFC_PROXY,
@@ -51,15 +54,23 @@ struct sfcapp_config {
 
 uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint16_t nb_pkts);
 
-void ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, uint16_t nb_pkts, 
-    struct ipv4_5tuple *tuples);
+void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple);
+
+void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple);
+
+void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tuples, 
+    struct ipv4_5tuple **tuple_ptrs, uint16_t nb_pkts);
 
 void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *dest);
 
 void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg);
 
-inline uint64_t common_mac_to_64(struct ether_addr *mac);
+uint64_t common_mac_to_64(struct ether_addr *mac);
 
-inline void common_64_to_mac(uint64_t val, struct ether_addr *mac);
+void common_64_to_mac(uint64_t val, struct ether_addr *mac);
+
+int common_parse_uint16(const char *str, uint16_t *res);
+
+int common_parse_ether(const char *str, struct ether_addr *eth_addr);
 
 #endif

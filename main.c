@@ -12,16 +12,16 @@
 #include "sfc_proxy.h"
 #include "sfc_forwarder.h"
 
-
+#define CFG_FILE_NAME_SIZE 256
 /* Remove later */
 int n_rx=0, n_tx=0;
 
 static uint8_t nb_ports;
 struct sfcapp_config sfcapp_cfg;
 
-char cfg_filename[64];
+char* cfg_filename;
 
-static struct rte_mempool *sfcapp_pktmbuf_pool;
+struct rte_mempool *sfcapp_pktmbuf_pool;
 
 static const struct rte_eth_conf port_cfg = {
     .rxmode = {
@@ -114,7 +114,7 @@ parse_args(int argc, char **argv){
     int pm;
     enum sfcapp_type type;
 
-    while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:")) != -1){
+    while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:f:")) != -1){
         switch(sfcapp_opt){
             case 'p':
                 pm = parse_portmask(optarg);
@@ -131,6 +131,9 @@ parse_args(int argc, char **argv){
                     sfcapp_cfg.type = type;
                 break;
             case 'f':
+                if(strlen(optarg) > CFG_FILE_NAME_SIZE)
+                    rte_exit(EXIT_FAILURE,"Config file name too long! Max is %d\n",CFG_FILE_NAME_SIZE);
+                cfg_filename = optarg;
                 break;
             case 'h':
                 break;
@@ -251,6 +254,7 @@ init_app(void) {
             //ret = forwarder_setup(cfg_filename);
             break;
         case SFC_PROXY:
+            printf("Starting proxy application...\n");
             ret = proxy_setup(cfg_filename);
             break;
         default:
