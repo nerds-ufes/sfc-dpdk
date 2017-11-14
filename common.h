@@ -24,10 +24,10 @@
 
 struct ipv4_5tuple {
     uint8_t proto;
-    uint16_t src_ip;
-    uint16_t dst_ip;
-    uint8_t  src_port;
-    uint8_t  dst_port;
+    uint32_t src_ip;
+    uint32_t dst_ip;
+    uint16_t  src_port;
+    uint16_t  dst_port;
 } __attribute__((__packed__));
 
 enum sfcapp_type {
@@ -56,7 +56,7 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint
 
 void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple);
 
-void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple);
+void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, uint16_t offset);
 
 void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tuples, 
     struct ipv4_5tuple **tuple_ptrs, uint16_t nb_pkts);
@@ -69,7 +69,15 @@ uint64_t common_mac_to_64(struct ether_addr *mac);
 
 void common_64_to_mac(uint64_t val, struct ether_addr *mac);
 
+int common_parse_portmask(const char *portmask);
+
+enum sfcapp_type common_parse_apptype(const char *type);
+
 int common_parse_uint16(const char *str, uint16_t *res);
+
+int common_parse_uint32(const char* str, uint32_t *res);
+
+int common_parse_uint64(const char* str, uint64_t *res);
 
 int common_parse_ether(const char *str, struct ether_addr *eth_addr);
 
