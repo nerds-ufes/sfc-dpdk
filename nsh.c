@@ -85,6 +85,20 @@ void nsh_decap(struct rte_mbuf* mbuf){
 
 //int nsh_dec_si(struct rte_mbuf* pkt_mbuf){}
 
+/* Initializes the NSH header with default values */
+int nsh_init_header(struct nsh_hdr *nsh_header){
+   
+    if(nsh_header == NULL)
+        return -1;
+    
+    nsh_header->basic_info =  ((uint8_t) 0) | NSH_TTL_DEFAULT | NSH_BASE_LENGHT_MD_TYPE_2;
+    nsh_header->md_type = NSH_MD_TYPE_2;
+    nsh_header->next_proto = NSH_NEXT_PROTO_ETHER;
+    nsh_header->serv_path = 0;
+    
+    return 0;
+}
+
 int nsh_get_header(struct rte_mbuf *mbuf, struct nsh_hdr *nsh_info){
     struct nsh_hdr *nsh_hdr;
 
