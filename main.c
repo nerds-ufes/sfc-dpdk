@@ -6,13 +6,15 @@
 #include <rte_eal.h>
 #include <rte_ethdev.h>
 #include <rte_lcore.h>
+#include <rte_cfgfile.h>
 
 #include "common.h"
 #include "sfc_classifier.h"
 #include "sfc_proxy.h"
 #include "sfc_forwarder.h"
 
-#define CFG_FILE_NAME_SIZE 256
+#define CFG_FILE_MAX_SECTIONS 1024
+
 /* Remove later */
 int n_rx=0, n_tx=0;
 
@@ -63,37 +65,6 @@ static void sfcapp_assoc_ports(int portmask){
     }
 }
 
-static int
-parse_portmask(const char *portmask)
-{
-	char *end = NULL;
-	unsigned long pm;
-
-	/* parse hexadecimal string */
-	pm = strtoul(portmask, &end, 16);
-	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0'))
-		return -1;
-
-	if (pm == 0)
-		return -1;
-
-	return pm;
-}
-
-static enum sfcapp_type
-parse_apptype(const char *type){
-    if(strcmp(type,"proxy") == 0)
-        return SFC_PROXY;
-    
-    if(strcmp(type,"classifier") == 0)
-        return SFC_CLASSIFIER;
-    
-    if(strcmp(type,"forwarder") == 0)
-        return SFC_FORWARDER;
-    
-    return NONE;
-}
-
 static const char sfcapp_options[] = {
     'p', /* Port mask */
     't', /* SFC entity type*/
@@ -117,22 +88,20 @@ parse_args(int argc, char **argv){
     while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:f:")) != -1){
         switch(sfcapp_opt){
             case 'p':
-                pm = parse_portmask(optarg);
+                pm = common_parse_portmask(optarg);
                 if(pm < 0)
                     rte_exit(EXIT_FAILURE,"Failed to parse portmask\n");
                 else
                     sfcapp_assoc_ports(pm);
                 break;
             case 't':
-                type = parse_apptype(optarg);
+                type = common_parse_apptype(optarg);
                 if(type == NONE)
                     rte_exit(EXIT_FAILURE,"Unrecognized type parameter.\n");
                 else
                     sfcapp_cfg.type = type;
                 break;
             case 'f':
-                if(strlen(optarg) > CFG_FILE_NAME_SIZE)
-                    rte_exit(EXIT_FAILURE,"Config file name too long! Max is %d\n",CFG_FILE_NAME_SIZE);
                 cfg_filename = optarg;
                 break;
             case 'h':
@@ -146,6 +115,63 @@ parse_args(int argc, char **argv){
                 break;
         }
     }
+}
+
+static void parse_config_file(char* cfg_filename){
+
+    struct rte_cfgfile *cfgfile;
+    char** sections;
+    int nb_sections, i;
+    struct rte_cfgfile_parameters cfg_params = {.comment_character = '#'};
+
+    cfgfile = rte_cfgfile_load_with_params(cfg_filename,0,&cfg_params);
+    
+    if(cfgfile == NULL)
+        rte_exit(EXIT_FAILURE,
+            "Failed to load proxy config file\n");
+    
+    nb_sections = rte_cfgfile_num_sections(cfgfile,NULL,0);
+
+    if(nb_sections <= 0)
+        rte_exit(EXIT_FAILURE,
+            "Not enough sections in config file\n");
+
+    sections = (char**) malloc(nb_sections*sizeof(char*));
+
+    if(sections == NULL)
+        rte_exit(EXIT_FAILURE,
+            "Failed to allocate memory when parsing proxy config file.\n");
+    
+    for(i = 0 ; i < nb_sections ; i++){
+        sections[i] = (char*) malloc(CFG_NAME_LEN*sizeof(char));    
+     
+        if(sections[i] == NULL)
+            rte_exit(EXIT_FAILURE,
+                "Failed to allocate memory when parsing proxy config file.\n");
+    }
+
+    rte_cfgfile_sections(cfgfile,sections,CFG_FILE_MAX_SECTIONS);
+    
+
+    switch(sfcapp_cfg.type){
+        case SFC_CLASSIFIER:
+            //classifier_setup();
+            //classifier_parse_config_file(&sections,nb_sections);
+            break;
+        case SFC_FORWARDER:
+            //forwarder_setup();
+            //forwarder_parse_config_file(&sections,nb_sections);
+            break;
+        case SFC_PROXY:
+            proxy_setup();
+            proxy_parse_config_file(cfgfile,sections,nb_sections);
+            break;
+        case NONE:
+            rte_exit(EXIT_FAILURE,"App type not detected, something is wrong!\n");
+            break;
+    };
+        
+    free(sections);
 }
 
 static void
@@ -241,29 +267,6 @@ init_port(uint8_t port, struct rte_mempool *mbuf_pool){
 
 }
 
-static int 
-init_app(void) {
-    int ret=0;
-
-    /* Parse config file and init app*/
-    switch(sfcapp_cfg.type){
-        case SFC_CLASSIFIER:
-            //ret = classifier_setup(cfg_filename);
-            break;
-        case SFC_FORWARDER:
-            //ret = forwarder_setup(cfg_filename);
-            break;
-        case SFC_PROXY:
-            printf("Starting proxy application...\n");
-            ret = proxy_setup(cfg_filename);
-            break;
-        default:
-            rte_exit(EXIT_FAILURE,"Application type not recognized.\n");
-    }
-
-    return ret;
-}
-
 static __attribute__((noreturn)) void 
 main_loop(void) {
     int rx_port = 0;
@@ -328,9 +331,8 @@ main(int argc, char **argv){
     nb_lcores = rte_lcore_count();
     SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
 
-    /* Read config files and setup app*/    
-    ret = init_app();
-    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to init app\n");
+    /* Read config file and setup app*/    
+    parse_config_file(cfg_filename);
         
     /* Start app (single core) */
     (sfcapp_cfg.main_loop)();

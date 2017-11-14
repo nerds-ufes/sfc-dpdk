@@ -4,7 +4,7 @@
 
 
 apt-get update
-apt-get install make gcc libnuma linux-headers-$(uname -r) libpcap-dev
+apt-get install make gcc libnuma-dev linux-headers-$(uname -r) libpcap-dev
 
 # Download and install dpdk
 # dpdk_rel=dpdk-17.05.2
@@ -15,7 +15,7 @@ apt-get install make gcc libnuma linux-headers-$(uname -r) libpcap-dev
 
 # Download and compile OVS
 apt-get install libssl-dev python2.7 python-pip
-pip install six
+pip install six netifaces
 cd /home/mscastanho/
 wget http://openvswitch.org/releases/openvswitch-2.8.0.tar.gz
 cd $OVS_DIR
@@ -23,4 +23,4 @@ cd $OVS_DIR
 make
 make install
 
-apt-get install qemu qemu-kvm 
+apt-get install qemu qemu-kvm python-openvswitch
