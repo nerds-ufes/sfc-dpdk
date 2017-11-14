@@ -13,7 +13,7 @@
 
 int forwarder_setup(char* cfg_filename);
 
-/* static forwarder_parse_config_file(char** cfg_filename); */
+/* static forwarder_parse_config_file(char** sections, int nb_sections); */
 
 __attribute__((noreturn)) void 
 forwarder_main_loop(void);
