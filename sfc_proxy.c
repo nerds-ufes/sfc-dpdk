@@ -5,105 +5,138 @@
 #include <rte_cfgfile.h>
 #include <rte_ethdev.h>
 #include <rte_cfgfile.h>
+#include <rte_ether.h>
 
 #include "sfc_proxy.h"
 #include "nsh.h"
 #include "common.h"
 
+#define VXLAN_NSH_INNER_OFFSET 58
+
 extern struct sfcapp_config sfcapp_cfg;
 
-static struct rte_hash *proxy_flow_header_lkp_table;
-/* key = ipv4_5tuple ; value = NSH base hdr + SPI + SI (64B) */
+static struct rte_hash *proxy_flow_lkp_table;
+/* key = ipv4_5tuple ; value = NSH base hdr + SPI + SI (4B) */
+
+static struct rte_hash* proxy_sf_id_lkp_table;
+/* key = <spi,si> ; value = sfid (16b) */
 
 static struct rte_hash *proxy_sf_address_lkp_table;
-/* key = SPI + SI (4B) ; value = ether_addr */
+/* key = sfid (16b) ; value = ethernet (48b in 64b) */
 
-static int proxy_parse_config_file(char* cfg_filename){
 
-    struct rte_cfgfile *cfgfile;
-    struct rte_cfgfile_entry entries[PROXY_CFG_SF_MAX_ENTRIES];
-    char** sections;
-    int nb_sections, nb_entries, i, j, ret;
+void proxy_parse_config_file(struct rte_cfgfile *cfgfile, char** sections, int nb_sections){
+
+    int sfid_ok, mac_ok, sph_ok;
+    int nb_entries;
+    int i,j,ret;
     uint16_t sfid;
-    struct ether_addr sf_mac;   
-    struct rte_cfgfile_parameters cfg_params = {.comment_character = '#'};
-    cfgfile = rte_cfgfile_load_with_params(cfg_filename,0,&cfg_params);
-    
-    if(cfgfile == NULL)
-        rte_exit(EXIT_FAILURE,
-            "Failed to load proxy config file\n");
-    
-    nb_sections = rte_cfgfile_num_sections(cfgfile,NULL,0);
+    uint32_t sph;
+    struct ether_addr sfmac;
+    struct rte_cfgfile_entry entries[PROXY_CFG_MAX_ENTRIES];
 
-    if(nb_sections <= 0)
-        rte_exit(EXIT_FAILURE,
-            "Not enough sections in proxy config file\n");
-
-    sections = (char**) malloc(nb_sections*sizeof(char*));
-    if(sections == NULL)
-        rte_exit(EXIT_FAILURE,
-            "Failed to allocate memory when parsing proxy config file.\n");
-    
+    /* Parse sections */
     for(i = 0 ; i < nb_sections ; i++){
-        sections[i] = (char*) malloc(CFG_NAME_LEN*sizeof(char));    
-     
-        if(sections[i] == NULL)
+
+        sfid_ok = 0;
+        mac_ok = 0;
+        sph_ok = 0;
+
+        nb_entries = rte_cfgfile_section_entries_by_index(cfgfile,i,sections[i],
+                        entries,PROXY_CFG_MAX_ENTRIES);
+
+        /* Parse SF Sections */
+        if(strcmp(sections[i],"SF") == 0){
+
+            if(nb_entries != 2)
+                rte_exit(EXIT_FAILURE,
+                    "Wrong argument number in SF section in config file. Expected 2, found %d",
+                    nb_entries);
+
+            for(j = 0 ; j < nb_entries ; j++){
+
+                //sfid
+                if(strcmp(entries[j].name,"sfid") == 0){
+                    if(sfid_ok)
+                        printf("Duplicated sfid entry in SF section. Ignoring...\n");
+                    else{
+                        ret = common_parse_uint16(entries[j].value,&sfid);
+                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse SF ID from config file\n");
+                        sfid_ok = 1;
+                    }
+
+                }
+
+                if(strcmp(entries[j].name,"mac") == 0){
+                    if(mac_ok)
+                        printf("Duplicated mac entry in SF section. Ignoring...\n");
+                    else{
+                        ret = common_parse_ether(entries[j].value,&sfmac);
+                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse mac address from config file\n");
+                        mac_ok = 1;
+                    }
+
+                } 
+            }
+
+            if(mac_ok && sfid_ok){
+                ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid, 
+                        (void *) common_mac_to_64(&sfmac));
+                SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add SF entry to table.\n");
+
+                char buf[ETHER_ADDR_FMT_SIZE + 1];
+                ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,&sfmac);
+                printf("Successfully added <sfid=%" PRIx16 ",mac=%s> to proxy" 
+                    " SF-address table.\n",sfid,buf);
+            }
+        }else if(strcmp(sections[i],"PATH_NODE") == 0){
+
+            if(nb_entries != 2)
+                rte_exit(EXIT_FAILURE,"Wrong argument number in SF section in config file. Expected 2, found %d",nb_entries);
+
+            for(j = 0 ; j < nb_entries ; j++){
+                
+                if(strcmp(entries[j].name,"sfid") == 0){
+                    if(sfid_ok)
+                        printf("Duplicated sfid entry in PATH_NODE section. Ignoring...\n");
+                    else{
+                        ret = common_parse_uint16(entries[j].value,&sfid);
+                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse SF ID from config file\n");
+                        sfid_ok = 1;
+                    }
+                }
+
+                if(strcmp(entries[j].name,"sph") == 0){
+                    if(sph_ok)
+                        printf("Duplicated mac entry in PATH_NODE section. Ignoring...\n");
+                    else{
+                        ret = common_parse_uint32(entries[j].value,&sph);
+                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse service path info from config file\n");
+                        sph_ok = 1;
+                    }
+                }         
+            }
+
+            if(sph_ok && sfid_ok){
+                ret = rte_hash_add_key_data(proxy_sf_id_lkp_table,&sph, 
+                        (void *) ((uint64_t) sfid) );
+                SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
+
+                printf("Successfully added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
+                       " to proxy SF ID table.\n",sph,sfid);
+            }
+        }else{
             rte_exit(EXIT_FAILURE,
-                "Failed to allocate memory when parsing proxy config file.\n");
+                "Section %s unknown, please check config file.\n",
+                sections[i]);
+        }    
     }
-
-    rte_cfgfile_sections(cfgfile,sections,PROXY_MAX_FUNCTIONS);
-    
-    //  Parse sections
-    for(i = 0 ; i < nb_sections ; i++){
-        nb_entries = rte_cfgfile_section_num_entries(cfgfile,
-                        sections[i]);
-        if(nb_entries != PROXY_CFG_SF_MAX_ENTRIES)
-            rte_exit(EXIT_FAILURE,
-                "Wrong number of entries for section %s, expecting %d.\n",
-                sections[i],
-                PROXY_CFG_SF_MAX_ENTRIES);
-
-        ret = rte_cfgfile_section_entries(cfgfile,sections[i],
-                entries,PROXY_CFG_SF_MAX_ENTRIES);
-        if(ret < 0){
-            rte_exit(EXIT_FAILURE,
-                "Failed to parse entries in section %s during proxy" 
-                "config file parsing.\n",sections[i]);
-        }
-        
-        sfid = 0;
-        
-        // Parse entries in each section
-        for(j = 0 ; j < nb_entries ; j++){
-
-            //sfid
-            if(strcmp(entries[j].name,"sfid") == 0)
-                ret = common_parse_uint16(entries[j].value,&sfid);
-
-            if(strcmp(entries[j].name,"mac") == 0)
-                ret = common_parse_ether(entries[j].value,&sf_mac);
-            SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse mac addres from config file\n");
-        }
-         
-        ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid, 
-                (void *) common_mac_to_64(&sf_mac));
-        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
-
-        char buf[ETHER_ADDR_FMT_SIZE + 1];
-        ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,&sf_mac);
-        printf("Successfully added <sfid=%" PRIu16 ",mac=%s> to proxy" 
-            " SF-address table.\n",sfid,buf);
-        
-    }
-
-    return ret;
 }
 
-static int proxy_init_flow_hdr_table(void){
+static int proxy_init_flow_table(void){
 
     const struct rte_hash_parameters hash_params = {
-        .name = "proxy_flow_hdr",
+        .name = "proxy_flow",
         .entries = PROXY_MAX_FLOWS,
         .reserved = 0,
         .key_len = sizeof(struct ipv4_5tuple),
@@ -112,9 +145,9 @@ static int proxy_init_flow_hdr_table(void){
         .socket_id = rte_socket_id()
     };
 
-    proxy_flow_header_lkp_table = rte_hash_create(&hash_params);
+    proxy_flow_lkp_table = rte_hash_create(&hash_params);
 
-    if(proxy_flow_header_lkp_table == NULL)
+    if(proxy_flow_lkp_table == NULL)
         return -1;
     
     return 0;
@@ -126,7 +159,7 @@ static int proxy_init_sf_addr_table(void){
         .name = "proxy_sf_addr",
         .entries = PROXY_MAX_FUNCTIONS,
         .reserved = 0,
-        .key_len = sizeof(uint32_t), 
+        .key_len = sizeof(uint16_t), /* SFID */
         .hash_func = rte_jhash,
         .hash_func_init_val = 0,
         .socket_id = rte_socket_id()
@@ -140,32 +173,32 @@ static int proxy_init_sf_addr_table(void){
     return 0;
 }
 
-/*static int proxy_init_next_func_table(void){
+static int proxy_init_sf_id_lkp_table(void){
     const struct rte_hash_parameters hash_params = {
         .name = "proxy_next_func",
         .entries = PROXY_MAX_FUNCTIONS,
         .reserved = 0,
-        .key_len = sizeof(uint32_t),  // SPI + SI
+        .key_len = sizeof(uint32_t),  /* <SPI,SI> */
         .hash_func = rte_jhash,
         .hash_func_init_val = 0,
         .socket_id = rte_socket_id()
     };
 
-    proxy_next_func_lkp_table = rte_hash_create(&hash_params);
+    proxy_sf_id_lkp_table = rte_hash_create(&hash_params);
 
-    if(proxy_next_func_lkp_table == NULL)
+    if(proxy_sf_id_lkp_table == NULL)
         return -1;
 
     return 0;
-}*/
+}
 
-int proxy_setup(char *cfg_filename){
+int proxy_setup(void){
 
     int ret = 0;
-    uint32_t sfid_stub1 = 0x0003E8FF;
-    struct ether_addr mac_stub1;
-    uint32_t sfid_stub2 = 2;
-    struct ether_addr mac_stub2 = {{0x02,0x02,0x02,0x02,0x02,0x02}};
+    /*uint32_t sfid_stub1 = 0x0003E8FF;
+    //struct ether_addr mac_stub1;
+    //uint32_t sfid_stub2 = 2;
+    //struct ether_addr mac_stub2 = {{0x02,0x02,0x02,0x02,0x02,0x02}};
 
     mac_stub1.addr_bytes[0] = 0x01;
     mac_stub1.addr_bytes[1] = 0x01;
@@ -173,24 +206,24 @@ int proxy_setup(char *cfg_filename){
     mac_stub1.addr_bytes[3] = 0x01;
     mac_stub1.addr_bytes[4] = 0x01;
     mac_stub1.addr_bytes[5] = 0x01;
-
-    ret = proxy_init_flow_hdr_table();
+*/
+    ret = proxy_init_flow_table();
     SFCAPP_CHECK_FAIL_LT(ret,0,
-        "Proxy: Failed to create flow hash table.\n");
+        "Proxy: Failed to create flow lookup table.\n");
     ret = proxy_init_sf_addr_table();
     SFCAPP_CHECK_FAIL_LT(ret,0,
-        "Proxy: Failed to create SF address hash table.\n");
+        "Proxy: Failed to create SF address lookup table.\n");
+    ret = proxy_init_sf_id_lkp_table();
+    SFCAPP_CHECK_FAIL_LT(ret,0,
+        "Proxy: Failed to create SF id lookup table.\n");
     /*ret = proxy_init_next_func_table();
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create next func hash table.\n");*/
 
-    printf("%s\n",cfg_filename);
-    proxy_parse_config_file(cfg_filename);
-
-    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub1, (void *) common_mac_to_64(&mac_stub1));
-    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
-    printf("Pointer to mac_stub1: %" PRIx64 "\n",(uint64_t)&mac_stub1);
-    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub2, (void *) common_mac_to_64(&mac_stub2));
-    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 2.\n");
+    //ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub1, (void *) common_mac_to_64(&mac_stub1));
+    //SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
+    //printf("Pointer to mac_stub1: %" PRIx64 "\n",(uint64_t)&mac_stub1);
+    //ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid_stub2, (void *) common_mac_to_64(&mac_stub2));
+    //SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 2.\n");
     
     sfcapp_cfg.main_loop = proxy_main_loop;
 
@@ -215,15 +248,19 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     //struct ipv4_5tuple ip_5tuples[BURST_SIZE];
     //struct ipv4_5tuple *tuple_ptrs[BURST_SIZE];
     //int32_t vals[BURST_SIZE];
-    uint64_t sf_mac_64;
+    uint16_t sfid;
+    uint64_t data;
     struct ether_addr sf_mac;
     int i, lkp;
+    uint16_t offset;
+    uint64_t sf_mac_64;
     *drop_mask = 0;
 
     /* Check if flow info is already stored in table */
-    /*rte_hash_lookup_bulk(proxy_flow_header_lkp_table,(void **) tuple_ptrs,
+    /*rte_hash_lookup_bulk(proxy_flow_lkp_table,(void **) tuple_ptrs,
             nb_pkts,vals);
     */
+    
 
     for(i = 0; i < nb_pkts ; i++){
 
@@ -233,15 +270,19 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
             
         nsh_get_header(mbufs[i],&nsh_header);
 
-        common_ipv4_get_5tuple(mbufs[i],&tuple);        
+        offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
+            sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr) +
+            sizeof(struct nsh_hdr);
+
+        common_ipv4_get_5tuple(mbufs[i],&tuple,offset);        
 
         /* Check if flow info is already stored in table */
-        lkp = rte_hash_lookup(proxy_flow_header_lkp_table,&tuple);
+        lkp = rte_hash_lookup(proxy_flow_lkp_table,&tuple);
         
         /* Flow not mapped yet in table. Let's add it */
         /*if(unlikely(lkp < 0)){
             printf("Adding flow!\n");
-            ret = rte_hash_add_key_data(proxy_flow_header_lkp_table,
+            ret = rte_hash_add_key_data(proxy_flow_lkp_table,
                 &tuple, (void *) nsh_header);
         }*/
         
@@ -250,39 +291,39 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         /* Decapsulate packet */
         nsh_decap(mbufs[i]);
         
+        //printf("Service path to lookup: 0x%08" PRIx32 "\n",nsh_header.serv_path);
+
         /* Get SF MAC address from table */
-        lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table, 
+        lkp = rte_hash_lookup_data(proxy_sf_id_lkp_table, 
                 (void *) &nsh_header.serv_path,
+                (void **) &data);
+
+        sfid = (uint16_t) data;
+
+        if(lkp >= 0){
+            printf("Found the first one!!! %" PRIu16 "\n",sfid);
+        }
+
+        lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table,
+                (void *) &sfid,
                 (void **) &sf_mac_64);
 
         // Currently not droping packets
         if( unlikely(lkp < 0) ){
+            printf("Didnt find it!!\n");
             *drop_mask |= 1<<i;
             continue;
+        }else{
+            printf("Found the second one!!!!\n");
         }
 
         // Convert hash data back to MAC
         common_64_to_mac(sf_mac_64,&sf_mac);
 
-        /*printf("\n\n\nSF MAC from hashtable: %02" PRIx32 ":%02" PRIx32 ":%02" PRIx32
-        ":%02" PRIx32 ":%02" PRIx32 ":%02" PRIx32 "\n",
-        sf_mac.addr_bytes[0],
-        sf_mac.addr_bytes[1],
-        sf_mac.addr_bytes[2],
-        sf_mac.addr_bytes[3],
-        sf_mac.addr_bytes[4],
-        sf_mac.addr_bytes[5]);
-        
-
-        printf("This is the servpath I used: %08" PRIx32 "\n",nsh_header.serv_path);
-        if(lkp > 0)
-            printf("Found it!!\n");
-        */
-
         /* Update src and dst MAC */
-        //common_dump_pkt(mbufs[i],"\n=== Full packet ===\n");
+        common_dump_pkt(mbufs[i],"\n=== Full packet ===\n");
         common_mac_update(mbufs[i],&sf_mac);
-        //common_dump_pkt(mbufs[i],"\n=== Sent packet ===\n");
+        common_dump_pkt(mbufs[i],"\n=== Sent packet ===\n");
     }
 }
 
@@ -311,7 +352,6 @@ void proxy_main_loop(void){
     for(;;){
     
         /* Receive packets from network */
-
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,
                      rx_pkts,BURST_SIZE);
 
@@ -322,14 +362,14 @@ void proxy_main_loop(void){
         //send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);
 
         /* Receive packets from SFs */
-        rte_eth_rx_burst(sfcapp_cfg.port2,0,
+        nb_rx = rte_eth_rx_burst(sfcapp_cfg.port2,0,
             rx_pkts,BURST_SIZE);
 
         /* Process and encap packets from SFs */
         //proxy_handle_outbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping  */
- //       send_pkts(rx_pkts,sfcapp_cfg.port1,0,nb_rx);  
+        //send_pkts(rx_pkts,sfcapp_cfg.port1,0,nb_rx);  
     }
 }
 

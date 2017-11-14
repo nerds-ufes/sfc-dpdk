@@ -5,17 +5,20 @@
 
 #define PROXY_MAX_FLOWS 1024
 #define PROXY_MAX_FUNCTIONS 64
-#define PROXY_CFG_SF_MAX_ENTRIES 2
+#define PROXY_CFG_MAX_ENTRIES 2
 
-/* static rte_hash* proxy_flow_header_lkp_table*/
-/* key = ipv4_5tuple ; value = ptr to packet */
+/* static rte_hash* proxy_flow_lkp_table*/
+/* key = ipv4_5tuple ; value = NSH base hdr + SPI + SI (4B) */
+
+/* static rte_hash* proxy_sf_id_lkp_table */
+/* key = <spi,si> ; value = sfid (16b) */
 
 /* static rte_hash* proxy_sf_address_lkp_table */
-/* key = sfid ; value = ether_addr */
+/* key = sfid (16b) ; value = ethernet (48b in 64b) */
 
-/* static int proxy_parse_config_file(char** cfg_filename); */
+void proxy_parse_config_file(struct rte_cfgfile *cfgfile, char** sections, int nb_sections);
 
-int proxy_setup(char *cfg_filename);
+int proxy_setup(void);
 
 void proxy_main_loop(void);
 
