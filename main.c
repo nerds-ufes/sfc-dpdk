@@ -156,7 +156,7 @@ static void parse_config_file(char* cfg_filename){
 
     switch(sfcapp_cfg.type){
         case SFC_CLASSIFIER:
-            //classifier_setup();
+            classifier_setup();
             //classifier_parse_config_file(&sections,nb_sections);
             break;
         case SFC_FORWARDER:
@@ -308,7 +308,7 @@ main(int argc, char **argv){
         rte_exit(EXIT_FAILURE, "Invalid EAL arguments.\n");
 
     rte_openlog_stream(stderr);
-    
+
     argc -= ret;
     argv += ret;
 
@@ -326,6 +326,10 @@ main(int argc, char **argv){
     ret = init_port(sfcapp_cfg.port2,sfcapp_pktmbuf_pool);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to setup TX port.\n");
 
+    /* Save port MACs */
+    rte_eth_macaddr_get(sfcapp_cfg.port1,&sfcapp_cfg.port1_mac);
+    rte_eth_macaddr_get(sfcapp_cfg.port2,&sfcapp_cfg.port2_mac);
+
     /* Init TX buffer */
     /*ret = rte_eth_tx_buffer_init(&sfcapp_cfg.tx_buffer,BURST_SIZE);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer.\n");
@@ -336,7 +340,18 @@ main(int argc, char **argv){
 
     /* Read config file and setup app*/    
     parse_config_file(cfg_filename);
-        
+
+    /* Setting SFF MAC address 
+     * Will change this later! This should come from terminal or a config file
+     */
+
+    sfcapp_cfg.sff_addr.addr_bytes[0] = 0xFF;
+    sfcapp_cfg.sff_addr.addr_bytes[1] = 0xEE;
+    sfcapp_cfg.sff_addr.addr_bytes[2] = 0xDD;
+    sfcapp_cfg.sff_addr.addr_bytes[3] = 0xCC;
+    sfcapp_cfg.sff_addr.addr_bytes[4] = 0xBB;
+    sfcapp_cfg.sff_addr.addr_bytes[5] = 0xAA;
+
     /* Start app (single core) */
     (sfcapp_cfg.main_loop)();
 

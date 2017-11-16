@@ -38,8 +38,10 @@ enum sfcapp_type {
 };
 
 struct sfcapp_config {
-    uint8_t port1; 
+    uint8_t port1;
+    struct ether_addr port1_mac; 
     uint8_t port2;   
+    struct ether_addr port2_mac;
     //struct rte_eth_tx_buffer tx_buffer; /* TX buffer for TX port*/         
     struct ether_addr sff_addr;                /* MAC address of SFF */
     enum sfcapp_type type;              /* SFC entity type */

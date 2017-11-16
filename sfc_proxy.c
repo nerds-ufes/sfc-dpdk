@@ -30,8 +30,6 @@ static struct rte_hash* proxy_sf_id_lkp_table;
 static struct rte_hash *proxy_sf_address_lkp_table;
 /* key = sfid (16b) ; value = ethernet (48b in 64b) */
 
-struct ether_addr port_macs[2];
-
 void proxy_parse_config_file(struct rte_cfgfile *cfgfile, char** sections, int nb_sections){
 
     int sfid_ok, mac_ok, sph_ok;
@@ -215,16 +213,6 @@ int proxy_setup(void){
     
     sfcapp_cfg.main_loop = proxy_main_loop;
 
-    sfcapp_cfg.sff_addr.addr_bytes[0] = 0xFF;
-    sfcapp_cfg.sff_addr.addr_bytes[1] = 0xEE;
-    sfcapp_cfg.sff_addr.addr_bytes[2] = 0xDD;
-    sfcapp_cfg.sff_addr.addr_bytes[3] = 0xCC;
-    sfcapp_cfg.sff_addr.addr_bytes[4] = 0xBB;
-    sfcapp_cfg.sff_addr.addr_bytes[5] = 0xAA;
-
-    rte_eth_macaddr_get(sfcapp_cfg.port1,&port_macs[0]);
-    rte_eth_macaddr_get(sfcapp_cfg.port2,&port_macs[1]);
-
     return 0;
 }
 
@@ -263,7 +251,7 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
     for(i = 0; i < nb_pkts ; i++){
         
-        common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
+        //common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
 
         nsh_get_header(mbufs[i],&nsh_header);
 
@@ -300,7 +288,7 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         /* Decapsulate packet */
         nsh_decap(mbufs[i]);
         
-        printf("Looking for SF for path %" PRIx32 "\n",nsh_header.serv_path);
+        //printf("Looking for SF for path %" PRIx32 "\n",nsh_header.serv_path);
 
         /* Get SF MAC address from table */
         lkp = rte_hash_lookup_data(proxy_sf_id_lkp_table, 
@@ -309,13 +297,13 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
         sfid = (uint16_t) data;
 
-        if(lkp >= 0){
+        /*if(lkp >= 0){
             printf("Found the SF ID!!! Data: %" PRIx16 "\n",sfid);
         }else{
             printf("Didn't find %" PRIx32 " the corresponding sfid\n",nsh_header.serv_path);
-        }
+        }*/
 
-        printf("Trying to get MAC for SF #%" PRIx16 "\n",sfid);
+        //printf("Trying to get MAC for SF #%" PRIx16 "\n",sfid);
 
         lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table,
                 (void *) &sfid,
@@ -323,19 +311,19 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
         // Currently not droping packets
         if( unlikely(lkp < 0) ){
-            printf("Didnt find MAC for SF #%" PRIx16 "\n",sfid);
+            //printf("Didnt find MAC for SF #%" PRIx16 "\n",sfid);
             *drop_mask |= 1<<i;
             continue;
-        }else{
+        }/*else{
             printf("Found the MAC!!!!\n");
-        }
+        }*/
 
         // Convert hash data back to MAC
         common_64_to_mac(sf_mac_64,&sf_mac);
 
-        common_mac_update(mbufs[i],&port_macs[1],&sf_mac);
+        common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_mac);
         
-        common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
+        //common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
     }
 }
 
@@ -365,9 +353,9 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
         nsh_encap(mbufs[i],&nsh_header);
 
         /* Add SFF's MAC address */
-        common_mac_update(mbufs[i],&port_macs[0],&sfcapp_cfg.sff_addr);
+        common_mac_update(mbufs[i],&sfcapp_cfg.port1_mac,&sfcapp_cfg.sff_addr);
 
-        common_dump_pkt(mbufs[i],"\n=== Encapsulated packet ===\n");
+        //common_dump_pkt(mbufs[i],"\n=== Encapsulated packet ===\n");
     }
 }
 
