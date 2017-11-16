@@ -110,14 +110,13 @@ void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tu
 }
 
 
-
-void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *dest){
+void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *src, struct ether_addr *dst){
     struct ether_hdr *eth_hdr;
 
     eth_hdr = rte_pktmbuf_mtod(mbuf,struct ether_hdr *);
 
-    ether_addr_copy(&eth_hdr->d_addr,&eth_hdr->s_addr);
-    ether_addr_copy(dest,&eth_hdr->d_addr);
+    ether_addr_copy(src,&eth_hdr->s_addr);
+    ether_addr_copy(dst,&eth_hdr->d_addr);
 }
 
 void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg){

@@ -41,7 +41,7 @@ struct sfcapp_config {
     uint8_t port1; 
     uint8_t port2;   
     //struct rte_eth_tx_buffer tx_buffer; /* TX buffer for TX port*/         
-    struct ether_addr next_hop;                /* MAC address of SFF */
+    struct ether_addr sff_addr;                /* MAC address of SFF */
     enum sfcapp_type type;              /* SFC entity type */
     void (*main_loop)(void);
 
@@ -61,7 +61,7 @@ void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, ui
 void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tuples, 
     struct ipv4_5tuple **tuple_ptrs, uint16_t nb_pkts);
 
-void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *dest);
+void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *src, struct ether_addr *dst);
 
 void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg);
 
