@@ -42,8 +42,6 @@ void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info){
     nsh_header->md_type     = nsh_info->md_type;
     nsh_header->next_proto  = nsh_info->next_proto;
     nsh_header->serv_path   = rte_cpu_to_be_32(nsh_info->serv_path);
-    
-    common_dump_pkt(mbuf,"\n=== Encapsulated packet ===\n");
 }
 
 void nsh_decap(struct rte_mbuf* mbuf){
@@ -76,16 +74,23 @@ void nsh_decap(struct rte_mbuf* mbuf){
 
 int nsh_dec_si(struct rte_mbuf* mbuf){
     struct nsh_hdr *nsh_hdr;
+    uint32_t serv_path;
 
     nsh_hdr = rte_pktmbuf_mtod_offset(mbuf,struct nsh_hdr *,
         sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
         sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr));
 
-    if( (nsh_hdr->serv_path & 0x000000FF) != 0 ){
-        nsh_hdr->serv_path--;
+    serv_path = rte_be_to_cpu_32(nsh_hdr->serv_path);
+
+    printf("SPI|SI before: %08" PRIx32 "\n",serv_path);
+    if( (serv_path & 0x000000FF) != 0 ){
+        serv_path--;
+        nsh_hdr->serv_path = rte_cpu_to_be_32(serv_path);
+        printf("SPI|SI after: %08" PRIx32 "\n",serv_path);
         return 0;
     }
 
+    printf("Failed to decrement SI\n");
     return -1;
 }
 
