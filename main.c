@@ -7,6 +7,7 @@
 #include <rte_ethdev.h>
 #include <rte_lcore.h>
 #include <rte_cfgfile.h>
+#include <rte_log.h>
 
 #include "common.h"
 #include "sfc_classifier.h"
@@ -306,6 +307,8 @@ main(int argc, char **argv){
     if(ret < 0)
         rte_exit(EXIT_FAILURE, "Invalid EAL arguments.\n");
 
+    rte_openlog_stream(stderr);
+    
     argc -= ret;
     argv += ret;
 

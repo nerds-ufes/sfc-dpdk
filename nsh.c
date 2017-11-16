@@ -6,6 +6,8 @@
 #include <rte_hexdump.h>
 #include <rte_ip.h>
 #include <rte_udp.h>
+#include <rte_log.h>
+
 #include "nsh.h"
 #include "common.h"
 
@@ -26,8 +28,10 @@ void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info){
 
     rte_pktmbuf_append(mbuf,offset);
 
-    if(mbuf == NULL)
-        rte_exit(EXIT_FAILURE,"Failed to encapsulate packet. Not enough room.\n");
+    if(mbuf == NULL){
+        RTE_LOG(NOTICE,USER1,"Failed to encapsulate packet. Not enough room.\n");
+        return;
+    }
     
     tun_hdr_sz = (sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) 
         + sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr));
@@ -52,8 +56,11 @@ void nsh_decap(struct rte_mbuf* mbuf){
     //printf("\n=== Full packet ===\n");
     //rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
 
-    if(!rte_pktmbuf_is_contiguous(mbuf))
-        rte_exit(EXIT_FAILURE,"Not contiguous!! Don't know what to do.\n");
+    if(!rte_pktmbuf_is_contiguous(mbuf)){
+        RTE_LOG(NOTICE,USER1,"Could not append to mbuf\n");
+        return;
+    }
+
     
     /* Get pointer to beginning of inner packet data */
     init_new_inner = (char*) mbuf->buf_addr + rte_pktmbuf_headroom(mbuf) + 
