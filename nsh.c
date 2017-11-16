@@ -107,7 +107,12 @@ int nsh_init_header(struct nsh_hdr *nsh_header){
     if(nsh_header == NULL)
         return -1;
     
-    nsh_header->basic_info =  ((uint8_t) 0) | NSH_TTL_DEFAULT | NSH_BASE_LENGHT_MD_TYPE_2;
+    /* Default value for basic_info | md_type | next_proto
+     * is 0x0FC20203 
+     */
+    nsh_header->basic_info =  ((uint16_t) 0)    |  
+                              NSH_TTL_DEFAULT   | 
+                              NSH_BASE_LENGHT_MD_TYPE_2;               
     nsh_header->md_type = NSH_MD_TYPE_2;
     nsh_header->next_proto = NSH_NEXT_PROTO_ETHER;
     nsh_header->serv_path = 0;
@@ -122,10 +127,10 @@ int nsh_get_header(struct rte_mbuf *mbuf, struct nsh_hdr *nsh_info){
         sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr));
 
 
-    nsh_info->basic_info = rte_be_to_cpu_16(nsh_hdr->basic_info);
+    nsh_info->basic_info = rte_cpu_to_be_16(nsh_hdr->basic_info);
     nsh_info->md_type = nsh_hdr->md_type;
     nsh_info->next_proto = nsh_hdr->next_proto;
-    nsh_info->serv_path = rte_be_to_cpu_32(nsh_hdr->serv_path);
+    nsh_info->serv_path = rte_cpu_to_be_32(nsh_hdr->serv_path);
 
     return 0;
 }
