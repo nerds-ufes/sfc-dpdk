@@ -4,13 +4,18 @@
 #include <rte_ethdev.h>
 #include <rte_ether.h>
 #include <rte_hash.h>
+#include <rte_jhash.h>
 
 #include "sfc_classifier.h"
+#include "common.h"
+#include "nsh.h"
 
-static rte_hash* classifier_flow_path_lkp_table;
+extern struct sfcapp_config sfcapp_cfg;
+
+static struct rte_hash* classifier_flow_path_lkp_table;
 /* key = ipv4_5tuple ; value = nsh_spi (3 Bytes)*/
 
-static rte_hash* classifier_sfp_lkp_table;
+//static rte_hash* classifier_sfp_lkp_table;
 /* key = spi (nsh_spi) ; value = initial SI (uint8_t) */
 
 static int classifier_init_flow_path_table(void){
@@ -33,7 +38,7 @@ static int classifier_init_flow_path_table(void){
     return 0;
 }
 
-static int classifier_init_sfp_table(void){
+/*static int classifier_init_sfp_table(void){
 
     const struct rte_hash_parameters hash_params = {
         .name = "classifier_sfp",
@@ -51,61 +56,70 @@ static int classifier_init_sfp_table(void){
         return -1;
     
     return 0;
-}
+}*/
 
-int classifier_setup(char* cfg_filename){
+int classifier_setup(void){
 
-    /* Init hash tables
-     * Parse config file
-     * 
-     */ 
+    int ret, lkp;
+    struct ipv4_5tuple tuple;
+    uint64_t nsh_header_64;
+
+    ret = classifier_init_flow_path_table();
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to initialize Classifier table");
+
+    tuple.src_ip    = 0x01020304;
+    tuple.dst_ip    = 0x04030201;
+    tuple.src_port  = 0x3039;
+    tuple.dst_port  = 0xd431;
+    tuple.proto     = 0x6;
+    nsh_header_64 = 0 | (0x000001FF);
+    lkp = rte_hash_add_key_data(classifier_flow_path_lkp_table,
+                &tuple, (void *) nsh_header_64);
+    if(lkp >= 0)
+        printf("Successfully added flow to table! Mapped to serv_path: %08" PRIx64 "\n",nsh_header_64);
+
+    sfcapp_cfg.main_loop = classifier_main_loop;
+
+    return 0;
 }
 
 static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts){
     uint16_t i;
-    uint32_t path_info;
+    uint64_t path_info;
     struct ipv4_5tuple tuple;
-    uint8_t initial_si;
     struct nsh_hdr nsh_header;
+    uint16_t offset;
 
-    if(likely(nb_pkts > 0)){
+    offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
+    sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr);
 
-        for(i = 0 ; i < nb_pkts ; i++){
+    for(i = 0 ; i < nb_pkts ; i++){
 
-            /* Get 5-tuple */
-            common_ipv4_get_5tuple(mbufs[i],&tuple);
+        //common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
+
+        /* Get 5-tuple */
+        common_ipv4_get_5tuple(mbufs[i],&tuple,offset);
+    
+        /* Get matching SFP from table */
+        rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);
+
+        nsh_init_header(&nsh_header);
+        nsh_header.serv_path = (uint32_t) path_info;
+        //printf("Adding the following serV_path to the packet: %" PRIx32 "\n",nsh_header.serv_path);
+
+        /* Encapsulate packet */
+        nsh_encap(mbufs[i],&nsh_header);
         
-            /* Get matching SFP from table */
-            rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);
+        common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sfcapp_cfg.sff_addr);
 
-            /* Get initial SI for this path from table */
-            rte_hash_lookup_data(classifier_sfp_lkp_table,&path_info,(void**) &initial_si);
-
-            /* Concatenate SPI + SI to form Service Path Header*/
-            path_info = (path_info << 8) | (uint32_t) initial_si;
-
-            nsh_init_header(&nsh_header);
-            nsh_header->serv_path = path_info;
-
-            /* Encapsulate packet */
-            nsh_encap(mbufs[i],&nsh_header);
-            
-        }
-        /* - Get 5-tuple
-         * - Get entry from table
-         * - Encapsulate packet
-         */
-
-        
-
-
+        //common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
     }
 }
 
 /* Parameters: 
  * forwarder_mac
  * SFP (ID e SI inicial)
- * classification rule (5-tuple to SFP)
+ * classification rule (5-tuple to SFP)*/
 /* static classifier_parse_config_file(char** cfg_filename); */
 
 
@@ -115,12 +129,13 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts){
  * Send to forwarder
  */
 __attribute__((noreturn)) void classifier_main_loop(void){
-    uint16_t nb_rx, nb_tx, i;
+    uint16_t nb_rx;
     struct rte_mbuf *rx_pkts[BURST_SIZE];
 
     for(;;){
 
-        nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,rx_pkts);
+        nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,rx_pkts,
+                    BURST_SIZE);
 
         /* Classify and encapsulate */
         if(likely(nb_rx > 0))

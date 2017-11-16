@@ -8,12 +8,9 @@
 #define CLASSIFIER_SFP_MAX_ENTRIES 64
 
 /* static rte_hash* classifier_flow_path_lkp_table*/
-/* key = ipv4_5tuple ; value = nsh_spi */
+/* key = ipv4_5tuple ; value = ns`h_spi */
 
-/* static rte_hash* classifier_sfp_lkp_table */
-/* key = spi (nsh_spi) ; value = initial SI (uint8_t) */
-
-//int classifier_setup(char* cfg_filename);
+int classifier_setup(void);
 
 /* classifier_parse_config_file(char** sections, int nb_sections); */
 
