@@ -20,6 +20,8 @@
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x06
 
+#define CFG_FILE_MAX_SECTIONS 1024
+
 #define SFCAPP_CHECK_FAIL_LT(var,val,msg) do { if(var < val) rte_exit(EXIT_FAILURE,msg); } while(0)
 
 struct ipv4_5tuple {
@@ -74,6 +76,8 @@ void common_64_to_mac(uint64_t val, struct ether_addr *mac);
 int common_parse_portmask(const char *portmask);
 
 enum sfcapp_type common_parse_apptype(const char *type);
+
+int common_parse_uint8(const char *str, uint8_t *res);
 
 int common_parse_uint16(const char *str, uint16_t *res);
 

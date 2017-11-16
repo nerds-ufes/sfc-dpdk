@@ -173,6 +173,19 @@ enum sfcapp_type common_parse_apptype(const char *type){
 }
 
 
+int common_parse_uint8(const char *str, uint8_t *res){
+    char *end;
+
+    errno = 0;
+    intmax_t val = strtoimax(str, &end, 16);
+
+    if (errno == ERANGE || val < 0 || val > 0xFF || end == str || *end != '\0')
+        return -1;
+
+    *res = (uint8_t) val;
+    return 0;
+}
+
 int common_parse_uint16(const char *str, uint16_t *res){
     char *end;
 
