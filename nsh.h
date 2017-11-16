@@ -70,4 +70,10 @@ int nsh_init_header(struct nsh_hdr *nsh_header);
  */ 
 int nsh_get_header(struct rte_mbuf *mbuf, struct nsh_hdr *nsh_info);
 
+/* Converts a struct nsh_hdr into a 64b unsigned integer */ 
+uint64_t nsh_header_to_uint64(struct nsh_hdr *nsh_info);
+
+/* Converts a 64b unsigned integer into a struct nsh_hdr */ 
+void nsh_uint64_to_header(uint64_t hdr_int, struct nsh_hdr *nsh_info);
+
 #endif

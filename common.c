@@ -35,9 +35,6 @@ void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, ui
     struct tcp_hdr *tcp_hdr;
     struct udp_hdr *udp_hdr;
 
-
-    common_dump_pkt(mbuf,"===== Packet received =====\n");
-
     ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf,struct ipv4_hdr *,
                     (offset + sizeof(struct ether_hdr)));
 
@@ -47,13 +44,11 @@ void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, ui
 
     switch(tuple->proto){
         case IP_PROTO_UDP:
-            printf("It's UDP!!\n");
             udp_hdr = (struct udp_hdr *) ( (unsigned char*) ipv4_hdr + sizeof(struct ipv4_hdr));
             tuple->src_port = rte_be_to_cpu_16(udp_hdr->src_port);
             tuple->dst_port = rte_be_to_cpu_16(udp_hdr->dst_port);
             break;
         case IP_PROTO_TCP:
-            printf("It's TCP!!\n");
             tcp_hdr = (struct tcp_hdr *) ( (unsigned char*) ipv4_hdr + sizeof(struct ipv4_hdr));
             tuple->src_port = rte_be_to_cpu_16(tcp_hdr->src_port);
             tuple->dst_port = rte_be_to_cpu_16(tcp_hdr->dst_port);
@@ -61,10 +56,7 @@ void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, ui
         default:
             break;
 
-    }
-        
-    //common_print_ipv4_5tuple(tuple);   
-
+    }  
 }
 
 void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tuples, 
