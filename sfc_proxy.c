@@ -197,6 +197,30 @@ static int proxy_init_sf_id_lkp_table(void){
     return 0;
 }
 
+void proxy_add_sph_entry(uint32_t sph, uint16_t sfid){
+    int ret;
+
+    ret = rte_hash_add_key_data(proxy_sf_id_lkp_table,&sph, 
+        (void *) ((uint64_t) sfid) );
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
+
+    printf("Successfully added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
+            " to proxy SF ID table.\n",sph,sfid);
+}
+
+void proxy_add_sf_address_entry(uint16_t sfid, struct ether_addr *eth_addr){
+    int ret;
+
+    ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid, 
+        (void *) common_mac_to_64(eth_addr));
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add SF entry to proxy table.\n");
+
+    char buf[ETHER_ADDR_FMT_SIZE + 1];
+    ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,eth_addr);
+    printf("Successfully added <sfid=%" PRIx16 ",mac=%s> to proxy" 
+        " SF-address table.\n",sfid,buf);
+}
+
 int proxy_setup(void){
 
     int ret = 0;

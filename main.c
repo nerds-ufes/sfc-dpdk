@@ -10,11 +10,10 @@
 #include <rte_log.h>
 
 #include "common.h"
+#include "parser.h"
 #include "sfc_classifier.h"
 #include "sfc_proxy.h"
 #include "sfc_forwarder.h"
-
-#define CFG_FILE_MAX_SECTIONS 1024
 
 /* Remove later */
 int n_rx=0, n_tx=0;
@@ -118,61 +117,22 @@ parse_args(int argc, char **argv){
     }
 }
 
-static void parse_config_file(char* cfg_filename){
-
-    struct rte_cfgfile *cfgfile;
-    char** sections;
-    int nb_sections, i;
-    struct rte_cfgfile_parameters cfg_params = {.comment_character = '#'};
-
-    cfgfile = rte_cfgfile_load_with_params(cfg_filename,0,&cfg_params);
-    
-    if(cfgfile == NULL)
-        rte_exit(EXIT_FAILURE,
-            "Failed to load proxy config file\n");
-    
-    nb_sections = rte_cfgfile_num_sections(cfgfile,NULL,0);
-
-    if(nb_sections <= 0)
-        rte_exit(EXIT_FAILURE,
-            "Not enough sections in config file\n");
-
-    sections = (char**) malloc(nb_sections*sizeof(char*));
-
-    if(sections == NULL)
-        rte_exit(EXIT_FAILURE,
-            "Failed to allocate memory when parsing proxy config file.\n");
-    
-    for(i = 0 ; i < nb_sections ; i++){
-        sections[i] = (char*) malloc(CFG_NAME_LEN*sizeof(char));    
-     
-        if(sections[i] == NULL)
-            rte_exit(EXIT_FAILURE,
-                "Failed to allocate memory when parsing proxy config file.\n");
-    }
-
-    rte_cfgfile_sections(cfgfile,sections,CFG_FILE_MAX_SECTIONS);
-    
+static void setup_app(void){
 
     switch(sfcapp_cfg.type){
         case SFC_CLASSIFIER:
             classifier_setup();
-            //classifier_parse_config_file(&sections,nb_sections);
             break;
         case SFC_FORWARDER:
-            //forwarder_setup();
-            //forwarder_parse_config_file(&sections,nb_sections);
+            forwarder_setup();
             break;
         case SFC_PROXY:
             proxy_setup();
-            proxy_parse_config_file(cfgfile,sections,nb_sections);
             break;
         case NONE:
             rte_exit(EXIT_FAILURE,"App type not detected, something is wrong!\n");
             break;
     };
-        
-    free(sections);
 }
 
 static void
@@ -262,7 +222,7 @@ init_port(uint8_t port, struct rte_mempool *mbuf_pool){
             eth_addr.addr_bytes[4],eth_addr.addr_bytes[5]);
 
     /* Remove this later! */
-    rte_eth_promiscuous_enable(port);
+    //rte_eth_promiscuous_enable(port);
 
     return 0;
 
@@ -337,6 +297,9 @@ main(int argc, char **argv){
 
     nb_lcores = rte_lcore_count();
     SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
+
+    /* Initialize corresponding tables */
+    setup_app();
 
     /* Read config file and setup app*/    
     parse_config_file(cfg_filename);

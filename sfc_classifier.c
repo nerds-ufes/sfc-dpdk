@@ -58,6 +58,16 @@ static int classifier_init_flow_path_table(void){
     return 0;
 }*/
 
+void classifier_add_flow_class_entry(struct ipv4_5tuple *tuple, uint32_t sfp){
+    int ret;
+
+    ret = rte_hash_add_key_data(classifier_flow_path_lkp_table,&tuple, 
+        (void *) ((uint64_t) sfp) );
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add entry to classifier table.\n");
+
+    printf("Successfully added flow entry to classifier table.\n");
+}
+
 int classifier_setup(void){
 
     int ret, lkp;

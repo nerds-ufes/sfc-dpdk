@@ -16,6 +16,10 @@
 /* static rte_hash* proxy_sf_address_lkp_table */
 /* key = sfid (16b) ; value = ethernet (48b in 64b) */
 
+void proxy_add_sph_entry(uint32_t sph, uint16_t sfid);
+
+void proxy_add_sf_address_entry(uint16_t sfid, struct ether_addr *eth_addr);
+
 void proxy_parse_config_file(struct rte_cfgfile *cfgfile, char** sections, int nb_sections);
 
 int proxy_setup(void);
