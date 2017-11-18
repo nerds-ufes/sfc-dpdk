@@ -73,18 +73,4 @@ uint64_t common_mac_to_64(struct ether_addr *mac);
 
 void common_64_to_mac(uint64_t val, struct ether_addr *mac);
 
-int common_parse_portmask(const char *portmask);
-
-enum sfcapp_type common_parse_apptype(const char *type);
-
-int common_parse_uint8(const char *str, uint8_t *res);
-
-int common_parse_uint16(const char *str, uint16_t *res);
-
-int common_parse_uint32(const char* str, uint32_t *res);
-
-int common_parse_uint64(const char* str, uint64_t *res);
-
-int common_parse_ether(const char *str, struct ether_addr *eth_addr);
-
 #endif

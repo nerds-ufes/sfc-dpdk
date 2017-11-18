@@ -65,7 +65,7 @@ void forwarder_add_sph_entry(uint32_t sph, uint16_t sfid){
         (void *) ((uint64_t) sfid) );
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry to Forwarder table.\n");
 
-    printf("Successfully added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
+    printf("Added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
             " to forwarder next sf table.\n",sph,sfid);
 }
 
@@ -78,7 +78,7 @@ void forwarder_add_sf_address_entry(uint16_t sfid, struct ether_addr *sfmac){
 
     char buf[ETHER_ADDR_FMT_SIZE + 1];
     ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,sfmac);
-    printf("Successfully added <sfid=%" PRIx16 ",mac=%s> to forwarder" 
+    printf("Added <sfid=%" PRIx16 ",mac=%s> to forwarder" 
         " SF-address table.\n",sfid,buf);
 }
 

@@ -30,114 +30,6 @@ static struct rte_hash* proxy_sf_id_lkp_table;
 static struct rte_hash *proxy_sf_address_lkp_table;
 /* key = sfid (16b) ; value = ethernet (48b in 64b) */
 
-void proxy_parse_config_file(struct rte_cfgfile *cfgfile, char** sections, int nb_sections){
-
-    int sfid_ok, mac_ok, sph_ok;
-    int nb_entries;
-    int i,j,ret;
-    uint16_t sfid;
-    uint32_t sph;
-    struct ether_addr sfmac;
-    struct rte_cfgfile_entry entries[PROXY_CFG_MAX_ENTRIES];
-
-    /* Parse sections */
-    for(i = 0 ; i < nb_sections ; i++){
-
-        sfid_ok = 0;
-        mac_ok = 0;
-        sph_ok = 0;
-
-        nb_entries = rte_cfgfile_section_entries_by_index(cfgfile,i,sections[i],
-                        entries,PROXY_CFG_MAX_ENTRIES);
-
-        /* Parse SF Sections */
-        if(strcmp(sections[i],"SF") == 0){
-
-            if(nb_entries != 2)
-                rte_exit(EXIT_FAILURE,
-                    "Wrong argument number in SF section in config file. Expected 2, found %d",
-                    nb_entries);
-
-            for(j = 0 ; j < nb_entries ; j++){
-
-                //sfid
-                if(strcmp(entries[j].name,"sfid") == 0){
-                    if(sfid_ok)
-                        printf("Duplicated sfid entry in SF section. Ignoring...\n");
-                    else{
-                        ret = common_parse_uint16(entries[j].value,&sfid);
-                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse SF ID from config file\n");
-                        sfid_ok = 1;
-                    }
-
-                }
-
-                if(strcmp(entries[j].name,"mac") == 0){
-                    if(mac_ok)
-                        printf("Duplicated mac entry in SF section. Ignoring...\n");
-                    else{
-                        ret = common_parse_ether(entries[j].value,&sfmac);
-                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse mac address from config file\n");
-                        mac_ok = 1;
-                    }
-
-                } 
-            }
-
-            if(mac_ok && sfid_ok){
-                ret = rte_hash_add_key_data(proxy_sf_address_lkp_table,&sfid, 
-                        (void *) common_mac_to_64(&sfmac));
-                SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add SF entry to table.\n");
-
-                char buf[ETHER_ADDR_FMT_SIZE + 1];
-                ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,&sfmac);
-                printf("Successfully added <sfid=%" PRIx16 ",mac=%s> to proxy" 
-                    " SF-address table.\n",sfid,buf);
-            }
-        }else if(strcmp(sections[i],"PATH_NODE") == 0){
-
-            if(nb_entries != 2)
-                rte_exit(EXIT_FAILURE,"Wrong argument number in SF section in config file. Expected 2, found %d",nb_entries);
-
-            for(j = 0 ; j < nb_entries ; j++){
-                
-                if(strcmp(entries[j].name,"sfid") == 0){
-                    if(sfid_ok)
-                        printf("Duplicated sfid entry in PATH_NODE section. Ignoring...\n");
-                    else{
-                        ret = common_parse_uint16(entries[j].value,&sfid);
-                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse SF ID from config file\n");
-                        sfid_ok = 1;
-                    }
-                }
-
-                if(strcmp(entries[j].name,"sph") == 0){
-                    if(sph_ok)
-                        printf("Duplicated mac entry in PATH_NODE section. Ignoring...\n");
-                    else{
-                        ret = common_parse_uint32(entries[j].value,&sph);
-                        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse service path info from config file\n");
-                        sph_ok = 1;
-                    }
-                }         
-            }
-
-            if(sph_ok && sfid_ok){
-                ret = rte_hash_add_key_data(proxy_sf_id_lkp_table,&sph, 
-                        (void *) ((uint64_t) sfid) );
-                SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
-
-                printf("Successfully added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
-                       " to proxy SF ID table.\n",sph,sfid);
-            }
-        }else{
-            rte_exit(EXIT_FAILURE,
-                "Section %s unknown, please check config file.\n",
-                sections[i]);
-        }    
-    }
-}
-
 static int proxy_init_flow_table(void){
 
     const struct rte_hash_parameters hash_params = {
@@ -204,7 +96,7 @@ void proxy_add_sph_entry(uint32_t sph, uint16_t sfid){
         (void *) ((uint64_t) sfid) );
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add stub entry 1.\n");
 
-    printf("Successfully added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
+    printf("Added <sph=%" PRIx32 ",sfid=%" PRIx16 ">"
             " to proxy SF ID table.\n",sph,sfid);
 }
 
@@ -217,8 +109,8 @@ void proxy_add_sf_address_entry(uint16_t sfid, struct ether_addr *eth_addr){
 
     char buf[ETHER_ADDR_FMT_SIZE + 1];
     ether_format_addr(buf,ETHER_ADDR_FMT_SIZE,eth_addr);
-    printf("Successfully added <sfid=%" PRIx16 ",mac=%s> to proxy" 
-        " SF-address table.\n",sfid,buf);
+    printf("Added <sfid=%" PRIx16 ",mac=%s> to proxy" 
+        " SF Address table.\n",sfid,buf);
 }
 
 int proxy_setup(void){

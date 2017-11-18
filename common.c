@@ -24,10 +24,24 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint
     return nb_tx;
 }
 
+static void sprint_ipv4(uint32_t ip, char* buffer){
+    uint8_t a,b,c,d;
+    a = (ip>>24);
+    b = (ip>>16);
+    c = (ip>>8);
+    d = ip;
+
+    sprintf(buffer,"%" PRIu8 ".%" PRIu8 ".%" PRIu8 ".%" PRIu8 "",a,b,c,d);
+}
+
 void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple){
-    printf("==== IPv4 5-Tuple ==== : <ipsrc: 0x%08" PRIx32 ", ipdst: 0x%08" PRIx32 ", proto: 0x%02" PRIx8
-        ", psrc: 0x%04" PRIx16 ", pdst: 0x%04" PRIx16 ">\n",tuple->src_ip,tuple->dst_ip,tuple->proto,
-        tuple->src_port,tuple->dst_port);
+    char ip1[16],ip2[16];
+    sprint_ipv4(tuple->src_ip,ip1);
+    sprint_ipv4(tuple->dst_ip,ip2);
+
+    printf("<ipsrc: %s, ipdst: %s, proto: 0x%02" PRIx8 ", psrc: %" PRIu16 
+           ", pdst: %" PRIu16 ">",ip1,ip2,tuple->proto,
+           tuple->src_port,tuple->dst_port);
 }
 
 void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, uint16_t offset){
@@ -142,115 +156,4 @@ void common_64_to_mac(uint64_t val, struct ether_addr *mac){
     mac->addr_bytes[3] = (uint8_t) (val>>24);// & 0xFF);
     mac->addr_bytes[4] = (uint8_t) (val>>32);// & 0xFF);
     mac->addr_bytes[5] = (uint8_t) (val>>40);// & 0xFF);
-}
-
-int common_parse_portmask(const char *portmask){
-	char *end = NULL;
-	unsigned long pm;
-
-	/* parse hexadecimal string */
-	pm = strtoul(portmask, &end, 16);
-	if ((portmask[0] == '\0') || (end == NULL) || (*end != '\0'))
-		return -1;
-
-	if (pm == 0)
-		return -1;
-
-	return pm;
-}
-
-enum sfcapp_type common_parse_apptype(const char *type){
-    if(strcmp(type,"proxy") == 0)
-        return SFC_PROXY;
-    
-    if(strcmp(type,"classifier") == 0)
-        return SFC_CLASSIFIER;
-    
-    if(strcmp(type,"forwarder") == 0)
-        return SFC_FORWARDER;
-    
-    return NONE;
-}
-
-
-int common_parse_uint8(const char *str, uint8_t *res){
-    char *end;
-
-    errno = 0;
-    intmax_t val = strtoimax(str, &end, 16);
-
-    if (errno == ERANGE || val < 0 || val > 0xFF || end == str || *end != '\0')
-        return -1;
-
-    *res = (uint8_t) val;
-    return 0;
-}
-
-int common_parse_uint16(const char *str, uint16_t *res){
-    char *end;
-
-    errno = 0;
-    intmax_t val = strtoimax(str, &end, 16);
-
-    if (errno == ERANGE || val < 0 || val > UINT16_MAX || end == str || *end != '\0')
-        return -1;
-
-    *res = (uint16_t) val;
-    return 0;
-}
-
-int common_parse_uint32(const char* str, uint32_t *res){
-    char *end;
-
-    errno = 0;
-    uint32_t val = strtoul(str, &end, 16);
-
-    if (errno == ERANGE || errno == EINVAL || end == str || *end != '\0')
-        return -1;
-
-    *res = val;
-    
-    return 0;
-}
-
-int common_parse_uint64(const char* str, uint64_t *res){
-    char *end;
-
-    errno = 0;
-    uint64_t val = strtoull(str, &end, 16);
-
-    if (errno == ERANGE || errno == EINVAL || end == str || *end != '\0')
-        return -1;
-
-    *res = val;
-
-    return 0;
-}
-
-int common_parse_ether(const char *str, struct ether_addr *eth_addr){
-    int i,cnt;
-    uint8_t vals[6];
-
-    printf("Parsing: %s\n",str);
-
-    //if(str == NULL) printf("str is NULL\n");
-    //if(eth_addr == NULL) printf("eth_addr is NULL\n");
-    //if(strlen(str) < (ETHER_ADDR_FMT_SIZE-1)) printf("strlen(str) < (ETHER_ADDR_FMT_SIZE-1) : %ld < %d\n", strlen(str),(ETHER_ADDR_FMT_SIZE-1));
-    
-    if(str == NULL || eth_addr == NULL || strlen(str) < (ETHER_ADDR_FMT_SIZE-1))
-        return -1;
-
-    cnt = sscanf(str,"%" SCNx8 ":%" SCNx8 ":%" SCNx8 ":%" SCNx8 ":%" SCNx8 ":%" SCNx8,
-        &vals[0], &vals[1], &vals[2], &vals[3], &vals[4], &vals[5]);
-
-    if(cnt == 6){
-        for(i = 0 ; i < 6 ; i++)
-            eth_addr->addr_bytes[i] = vals[i];
-    
-        return 0;
-    }
-
-    //printf("Read %d bytes instead of 6\n",cnt);
-    return -1;
-    
 }

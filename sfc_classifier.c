@@ -65,28 +65,16 @@ void classifier_add_flow_class_entry(struct ipv4_5tuple *tuple, uint32_t sfp){
         (void *) ((uint64_t) sfp) );
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add entry to classifier table.\n");
 
-    printf("Successfully added flow entry to classifier table.\n");
+    printf("Added ");
+    common_print_ipv4_5tuple(tuple);
+    printf(" -> %" PRIu32 " to classifier flow table\n",sfp);
 }
 
 int classifier_setup(void){
 
-    int ret, lkp;
-    struct ipv4_5tuple tuple;
-    uint64_t nsh_header_64;
-
+    int ret;
     ret = classifier_init_flow_path_table();
-    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to initialize Classifier table");
-
-    tuple.src_ip    = 0x01020304;
-    tuple.dst_ip    = 0x04030201;
-    tuple.src_port  = 0x3039;
-    tuple.dst_port  = 0xd431;
-    tuple.proto     = 0x6;
-    nsh_header_64 = 0 | (0x000001FF);
-    lkp = rte_hash_add_key_data(classifier_flow_path_lkp_table,
-                &tuple, (void *) nsh_header_64);
-    if(lkp >= 0)
-        printf("Successfully added flow to table! Mapped to serv_path: %08" PRIx64 "\n",nsh_header_64);
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to initialize Classifier table\n");
 
     sfcapp_cfg.main_loop = classifier_main_loop;
 

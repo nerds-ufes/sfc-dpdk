@@ -88,14 +88,14 @@ parse_args(int argc, char **argv){
     while( (sfcapp_opt = getopt(argc,argv,"p:t:hH:f:")) != -1){
         switch(sfcapp_opt){
             case 'p':
-                pm = common_parse_portmask(optarg);
+                pm = parse_portmask(optarg);
                 if(pm < 0)
                     rte_exit(EXIT_FAILURE,"Failed to parse portmask\n");
                 else
                     sfcapp_assoc_ports(pm);
                 break;
             case 't':
-                type = common_parse_apptype(optarg);
+                type = parse_apptype(optarg);
                 if(type == NONE)
                     rte_exit(EXIT_FAILURE,"Unrecognized type parameter.\n");
                 else
