@@ -13,12 +13,6 @@
 
 #define VXLAN_NSH_INNER_OFFSET 58
 
-#define CHECK_LKP_FAIL(drop_mask,lkp) \
-        if(unlikely(lkp < 0)){ \
-            *drop_mask |= 1<<i; \
-            continue; \
-        }
-
 extern struct sfcapp_config sfcapp_cfg;
 
 static struct rte_hash *proxy_flow_lkp_table;
@@ -166,8 +160,13 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     
 
     for(i = 0; i < nb_pkts ; i++){
-        
-        //common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
+
+        /* Check if this packet is for me! If not, drop*/
+        lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
+        if(lkp != 0){
+            *drop_mask &= 1<<i; 
+            continue;
+        }
 
         nsh_get_header(mbufs[i],&nsh_header);
 
@@ -200,6 +199,8 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
             // Undo decrementing after saving to table
             nsh_header.serv_path++;
         }
+
+        common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
         
         /* Decapsulate packet */
         nsh_decap(mbufs[i]);
@@ -210,6 +211,7 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         lkp = rte_hash_lookup_data(proxy_sf_id_lkp_table, 
                 (void *) &nsh_header.serv_path,
                 (void **) &data);
+        COND_MARK_DROP(lkp,drop_mask);
 
         sfid = (uint16_t) data;
 
@@ -226,11 +228,8 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
                 (void **) &sf_mac_64);
 
         // Currently not droping packets
-        if( unlikely(lkp < 0) ){
-            //printf("Didnt find MAC for SF #%" PRIx16 "\n",sfid);
-            *drop_mask |= 1<<i;
-            continue;
-        }/*else{
+        COND_MARK_DROP(lkp,drop_mask);
+        /*else{
             printf("Found the MAC!!!!\n");
         }*/
 
@@ -239,7 +238,7 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
         common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_mac);
         
-        //common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
+        common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
     }
 }
 
@@ -253,6 +252,13 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
 
     for(i = 0 ; i < nb_pkts ; i++){
 
+        /* Check if this packet is for me! If not, drop*/
+        lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
+        if(lkp != 0){
+            *drop_mask &= 1<<i; 
+            continue;
+        }
+
         offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
             sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr);
 
@@ -261,7 +267,7 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
         /* Get packet header from hash table */
         lkp = rte_hash_lookup_data(proxy_flow_lkp_table,
                 (void*) &tuple,(void**) &nsh_header_64);
-        CHECK_LKP_FAIL(drop_mask,lkp);
+        COND_MARK_DROP(lkp,drop_mask);
         
         nsh_uint64_to_header(nsh_header_64,&nsh_header);
         
@@ -283,6 +289,9 @@ void proxy_main_loop(void){
     
     for(;;){
     
+        drop_mask = 0;
+        common_flush_tx_buffers();
+
         /* Receive packets from network */
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,
                      rx_pkts,BURST_SIZE);
@@ -291,7 +300,7 @@ void proxy_main_loop(void){
         proxy_handle_inbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping */
-        send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);
+        send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask);
 
         drop_mask = 0;
 
@@ -303,7 +312,7 @@ void proxy_main_loop(void){
         proxy_handle_outbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
         /* TODO: Only send packets not marked for dropping  */
-        send_pkts(rx_pkts,sfcapp_cfg.port1,0,nb_rx);  
+        send_pkts(rx_pkts,sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1,nb_rx,drop_mask); 
     }
 }
 

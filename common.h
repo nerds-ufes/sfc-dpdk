@@ -24,6 +24,13 @@
 
 #define SFCAPP_CHECK_FAIL_LT(var,val,msg) do { if(var < val) rte_exit(EXIT_FAILURE,msg); } while(0)
 
+#define COND_MARK_DROP(lkp,drop_mask) \
+        if(unlikely(lkp < 0)){ \
+            /*printf("Dropping packet!\n");*/ \
+            *drop_mask |= 1<<i; \
+            continue; \
+        }
+
 struct ipv4_5tuple {
     uint8_t proto;
     uint32_t src_ip;
@@ -41,10 +48,11 @@ enum sfcapp_type {
 
 struct sfcapp_config {
     uint8_t port1;
+    struct rte_eth_dev_tx_buffer *tx_buffer1; /* TX buffer for TX port*/         
     struct ether_addr port1_mac; 
+    struct rte_eth_dev_tx_buffer *tx_buffer2; /* TX buffer for TX port*/         
     uint8_t port2;   
     struct ether_addr port2_mac;
-    //struct rte_eth_tx_buffer tx_buffer; /* TX buffer for TX port*/         
     struct ether_addr sff_addr;                /* MAC address of SFF */
     enum sfcapp_type type;              /* SFC entity type */
     void (*main_loop)(void);
@@ -56,7 +64,10 @@ struct sfcapp_config {
     .comment_character = '#'
 };*/
 
-uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint16_t nb_pkts);
+void common_flush_tx_buffers(void);
+
+void send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, struct rte_eth_dev_tx_buffer* tx_buffer,
+ uint16_t nb_pkts, uint64_t drop_mask);
 
 void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple);
 
@@ -72,5 +83,7 @@ void common_dump_pkt(struct rte_mbuf *mbuf, const char *msg);
 uint64_t common_mac_to_64(struct ether_addr *mac);
 
 void common_64_to_mac(uint64_t val, struct ether_addr *mac);
+
+int common_check_destination(struct rte_mbuf *mbuf, struct ether_addr *mac);
 
 #endif

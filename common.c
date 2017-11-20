@@ -8,20 +8,24 @@
 
 #include "common.h"
 
-uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, uint16_t nb_pkts){
+extern struct sfcapp_config sfcapp_cfg;
+
+void common_flush_tx_buffers(void){
+    rte_eth_tx_buffer_flush(sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1);
+    rte_eth_tx_buffer_flush(sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2);
+}
+
+void send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, struct rte_eth_dev_tx_buffer* tx_buffer,
+ uint16_t nb_pkts, uint64_t drop_mask){
     
-    uint16_t nb_tx;
-    uint16_t buf;
+    uint16_t i;
 
-    nb_tx = rte_eth_tx_burst(tx_port,tx_q,
-        mbufs,nb_pkts);
-
-    if(unlikely(nb_tx < nb_pkts)){
-        for(buf = nb_tx ; buf < nb_pkts ; buf++)
-            rte_pktmbuf_free(mbufs[buf]);
+    for(i = 0 ; i < nb_pkts ; i++){
+        if( (drop_mask & (1<<i)) == 0 )
+            rte_eth_tx_buffer(tx_port,tx_q,tx_buffer,mbufs[i]);
+        else
+            printf("Dropping packet!\n");
     }
-
-    return nb_tx;
 }
 
 static void sprint_ipv4(uint32_t ip, char* buffer){
@@ -39,7 +43,7 @@ void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple){
     sprint_ipv4(tuple->src_ip,ip1);
     sprint_ipv4(tuple->dst_ip,ip2);
 
-    printf("<ipsrc: %s, ipdst: %s, proto: 0x%02" PRIx8 ", psrc: %" PRIu16 
+    printf("<ipsrc: %s, ipdst: %s, proto: 0x%02" PRIu8 ", psrc: %" PRIu16 
            ", pdst: %" PRIu16 ">",ip1,ip2,tuple->proto,
            tuple->src_port,tuple->dst_port);
 }
@@ -156,4 +160,17 @@ void common_64_to_mac(uint64_t val, struct ether_addr *mac){
     mac->addr_bytes[3] = (uint8_t) (val>>24);// & 0xFF);
     mac->addr_bytes[4] = (uint8_t) (val>>32);// & 0xFF);
     mac->addr_bytes[5] = (uint8_t) (val>>40);// & 0xFF);
+}
+
+int common_check_destination(struct rte_mbuf *mbuf, struct ether_addr *mac){
+    struct ether_hdr *eth_hdr;
+    char mac1[64],mac2[64];
+    int res;
+    eth_hdr = rte_pktmbuf_mtod(mbuf,struct ether_hdr *);
+    ether_format_addr(mac1,64,&eth_hdr->d_addr);
+    ether_format_addr(mac2,64,mac);
+    res = memcmp(&eth_hdr->d_addr,mac,sizeof(struct ether_addr));
+    /*if(res == 0)
+        printf("Comparing %s == %s => result: %d\n",mac1,mac2,res);
+    */return res;
 }

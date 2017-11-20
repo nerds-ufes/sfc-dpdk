@@ -60,14 +60,33 @@ static int classifier_init_flow_path_table(void){
 
 void classifier_add_flow_class_entry(struct ipv4_5tuple *tuple, uint32_t sfp){
     int ret;
+    struct ipv4_5tuple local_tuple;
+    memcpy(&local_tuple,tuple,sizeof(struct ipv4_5tuple));
 
-    ret = rte_hash_add_key_data(classifier_flow_path_lkp_table,&tuple, 
-        (void *) ((uint64_t) sfp) );
+    sfp = (sfp<<8) | 0xFF;
+
+    ret = rte_hash_add_key_data(classifier_flow_path_lkp_table,&local_tuple, 
+        (void *) ((uint64_t) sfp));
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to add entry to classifier table.\n");
 
     printf("Added ");
-    common_print_ipv4_5tuple(tuple);
-    printf(" -> %" PRIu32 " to classifier flow table\n",sfp);
+    common_print_ipv4_5tuple(&local_tuple);
+    printf(" -> %" PRIx32 " to classifier flow table\n",sfp);
+        
+    /*uint32_t it = 0;
+    struct ipv4_5tuple *key;
+    uint64_t data;
+    ret = 1;
+    printf("Printing contents of classifier_flow_path_lkp_table:\n");
+    while(ret >= 0){
+        ret = rte_hash_iterate(classifier_flow_path_lkp_table,(const void**) &key , (void **) &data,&it);
+        
+        if(ret >= 0){
+            common_print_ipv4_5tuple(key); printf(" -> ");
+            printf("%" PRIx32 "\n",(uint32_t) data);
+        }
+
+    }*/
 }
 
 int classifier_setup(void){
@@ -81,25 +100,38 @@ int classifier_setup(void){
     return 0;
 }
 
-static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts){
+static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, uint64_t *drop_mask){
     uint16_t i;
     uint64_t path_info;
     struct ipv4_5tuple tuple;
     struct nsh_hdr nsh_header;
     uint16_t offset;
+    int lkp;
+
+    *drop_mask = 0;
 
     offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
     sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr);
 
     for(i = 0 ; i < nb_pkts ; i++){
 
-        //common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
+        /* Check if this packet is for me! If not, drop*/
+        lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
+        if(lkp != 0){
+            *drop_mask &= 1<<i; 
+            continue;
+        }
 
         /* Get 5-tuple */
         common_ipv4_get_5tuple(mbufs[i],&tuple,offset);
+
+        common_print_ipv4_5tuple(&tuple); printf("\n");
     
         /* Get matching SFP from table */
-        rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);
+        lkp = rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);
+        COND_MARK_DROP(lkp,drop_mask);
+
+        common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
 
         nsh_init_header(&nsh_header);
         nsh_header.serv_path = (uint32_t) path_info;
@@ -110,7 +142,7 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts){
         
         common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sfcapp_cfg.sff_addr);
 
-        //common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
+        common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
     }
 }
 
@@ -129,16 +161,21 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts){
 __attribute__((noreturn)) void classifier_main_loop(void){
     uint16_t nb_rx;
     struct rte_mbuf *rx_pkts[BURST_SIZE];
+    uint64_t drop_mask;
 
     for(;;){
 
+        drop_mask = 0;
+
+        common_flush_tx_buffers();
+        
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,rx_pkts,
                     BURST_SIZE);
 
         /* Classify and encapsulate */
         if(likely(nb_rx > 0))
-            classifier_handle_pkts(rx_pkts,nb_rx);
+            classifier_handle_pkts(rx_pkts,nb_rx,&drop_mask);
         
-        send_pkts(rx_pkts,sfcapp_cfg.port2,0,nb_rx);  
+        send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask); 
     }
 }

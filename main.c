@@ -8,6 +8,7 @@
 #include <rte_lcore.h>
 #include <rte_cfgfile.h>
 #include <rte_log.h>
+#include <rte_malloc.h>
 
 #include "common.h"
 #include "parser.h"
@@ -222,7 +223,20 @@ init_port(uint8_t port, struct rte_mempool *mbuf_pool){
             eth_addr.addr_bytes[4],eth_addr.addr_bytes[5]);
 
     /* Remove this later! */
-    //rte_eth_promiscuous_enable(port);
+
+    switch(rte_eth_promiscuous_get(port)){
+        case 1:
+            printf("Promiscuous mode initially ENABLED for port %" PRIu16 "\n",port);
+            break;
+        case 0:
+            printf("Promiscuous mode initially DISABLED for port %" PRIu16 "\n",port);
+            break;
+        default:
+            printf("Error while trying to define prosmic status por fort %" PRIu16 " \n",port);
+            break;
+    }
+
+    rte_eth_promiscuous_disable(port);
 
     return 0;
 
@@ -290,10 +304,14 @@ main(int argc, char **argv){
     rte_eth_macaddr_get(sfcapp_cfg.port1,&sfcapp_cfg.port1_mac);
     rte_eth_macaddr_get(sfcapp_cfg.port2,&sfcapp_cfg.port2_mac);
 
-    /* Init TX buffer */
-    /*ret = rte_eth_tx_buffer_init(&sfcapp_cfg.tx_buffer,BURST_SIZE);
-    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer.\n");
-    */
+    /* Init TX buffers */
+    sfcapp_cfg.tx_buffer1 = rte_malloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
+    ret = rte_eth_tx_buffer_init(sfcapp_cfg.tx_buffer1,BURST_SIZE);
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer1.\n");
+
+    sfcapp_cfg.tx_buffer2 = rte_malloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
+    ret = rte_eth_tx_buffer_init(sfcapp_cfg.tx_buffer2,BURST_SIZE);
+    SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer2.\n");
 
     nb_lcores = rte_lcore_count();
     SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
@@ -308,12 +326,12 @@ main(int argc, char **argv){
      * Will change this later! This should come from terminal or a config file
      */
 
-    sfcapp_cfg.sff_addr.addr_bytes[0] = 0xFF;
-    sfcapp_cfg.sff_addr.addr_bytes[1] = 0xEE;
-    sfcapp_cfg.sff_addr.addr_bytes[2] = 0xDD;
-    sfcapp_cfg.sff_addr.addr_bytes[3] = 0xCC;
-    sfcapp_cfg.sff_addr.addr_bytes[4] = 0xBB;
-    sfcapp_cfg.sff_addr.addr_bytes[5] = 0xAA;
+    sfcapp_cfg.sff_addr.addr_bytes[0] = 0x00;
+    sfcapp_cfg.sff_addr.addr_bytes[1] = 0x00;
+    sfcapp_cfg.sff_addr.addr_bytes[2] = 0x00;
+    sfcapp_cfg.sff_addr.addr_bytes[3] = 0x00;
+    sfcapp_cfg.sff_addr.addr_bytes[4] = 0x00;
+    sfcapp_cfg.sff_addr.addr_bytes[5] = 0x05;
 
     /* Start app (single core) */
     (sfcapp_cfg.main_loop)();
