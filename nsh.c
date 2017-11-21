@@ -10,6 +10,7 @@
 
 #include "nsh.h"
 #include "common.h"
+#include "vxlan_gpe.h"
 
 extern struct rte_mempool *sfcapp_pktmbuf_pool;
 
@@ -19,6 +20,8 @@ void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info){
     uint16_t tun_hdr_sz;
     uint16_t offset;
     struct nsh_hdr *nsh_header;
+    struct vxlan_hdr *vxl_hdr;
+    uint32_t vxlan_flags;
 
     /* TODO: Check if packet is VXLAN or not */
     if(!rte_pktmbuf_is_contiguous(mbuf))
@@ -32,7 +35,19 @@ void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info){
         RTE_LOG(NOTICE,USER1,"Failed to encapsulate packet. Not enough room.\n");
         return;
     }
+
+    vxl_hdr = rte_pktmbuf_mtod_offset(mbuf,struct vxlan_hdr *,sizeof(struct ether_hdr) + 
+            sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr));
     
+    /* Adjust VXLAN-gpe header */
+    vxlan_flags = rte_be_to_cpu_32(vxl_hdr->vx_flags);
+
+    vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG | VXLAN_INSTANCE_FLAG; /* Set vxlan flags */
+    vxlan_flags &= ~VXLAN_NEXT_MASK; /* zero next-proto field */
+    vxlan_flags |= VXLAN_NEXT_NSH;
+
+    vxl_hdr->vx_flags = rte_cpu_to_be_32(vxlan_flags);
+
     tun_hdr_sz = (sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) 
         + sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr));
 
@@ -52,6 +67,8 @@ void nsh_decap(struct rte_mbuf* mbuf){
     int i;
     char *init_new_inner;
     uint16_t offset;
+    struct vxlan_hdr *vxl_hdr;
+    uint32_t vxlan_flags;
 
     //printf("\n=== Full packet ===\n");
     //rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
@@ -60,6 +77,18 @@ void nsh_decap(struct rte_mbuf* mbuf){
         RTE_LOG(NOTICE,USER1,"Could not append to mbuf\n");
         return;
     }
+
+    vxl_hdr = rte_pktmbuf_mtod_offset(mbuf,struct vxlan_hdr *,sizeof(struct ether_hdr) + 
+            sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr));
+    
+    /* Adjust VXLAN-gpe header */
+    vxlan_flags = rte_be_to_cpu_32(vxl_hdr->vx_flags);
+
+    vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG | VXLAN_INSTANCE_FLAG; /* Set vxlan flags */
+    vxlan_flags &= ~VXLAN_NEXT_MASK; /* zero next-proto field */
+    vxlan_flags |= VXLAN_NEXT_ETHER;
+
+    vxl_hdr->vx_flags = rte_cpu_to_be_32(vxlan_flags);
 
     
     /* Get pointer to beginning of inner packet data */
