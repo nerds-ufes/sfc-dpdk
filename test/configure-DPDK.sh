@@ -31,5 +31,5 @@ if ! lsmod | grep igb_uio &> /dev/null ; then
 fi
 
 ###### Bind interfaces to DPDK ######
-#$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:02:00.0
-#$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:00:08.0
+$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:00:04.0
+$RTE_SDK/usertools/dpdk-devbind.py -b igb_uio 0000:00:05.0

@@ -10,7 +10,10 @@
 #include "common.h"
 #include "nsh.h"
 
+#define BURST_TX_DRAIN_US 100
+
 extern struct sfcapp_config sfcapp_cfg;
+extern long int n_rx, n_tx;
 
 static struct rte_hash* classifier_flow_path_lkp_table;
 /* key = ipv4_5tuple ; value = nsh_spi (3 Bytes)*/
@@ -118,7 +121,8 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, ui
         /* Check if this packet is for me! If not, drop*/
         lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
         if(lkp != 0){
-            *drop_mask &= 1<<i; 
+            printf("Not for me!\n");
+            *drop_mask |= 1<<i; 
             continue;
         }
 
@@ -135,14 +139,13 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, ui
 
         nsh_init_header(&nsh_header);
         nsh_header.serv_path = (uint32_t) path_info;
-        //printf("Adding the following serV_path to the packet: %" PRIx32 "\n",nsh_header.serv_path);
 
         /* Encapsulate packet */
         nsh_encap(mbufs[i],&nsh_header);
         
         common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sfcapp_cfg.sff_addr);
 
-        common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
+        sfcapp_cfg.rx_pkts++;
     }
 }
 
@@ -173,9 +176,10 @@ __attribute__((noreturn)) void classifier_main_loop(void){
                     BURST_SIZE);
 
         /* Classify and encapsulate */
-        if(likely(nb_rx > 0))
-            classifier_handle_pkts(rx_pkts,nb_rx,&drop_mask);
-        
-        send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask); 
+        if(likely(nb_rx > 0)){  
+            classifier_handle_pkts(rx_pkts,nb_rx,&drop_mask);        
+            sfcapp_cfg.tx_pkts += send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask); 
+        }
+
     }
 }

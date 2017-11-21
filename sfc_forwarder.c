@@ -84,9 +84,6 @@ void forwarder_add_sf_address_entry(uint16_t sfid, struct ether_addr *sfmac){
 
 int forwarder_setup(void){
     int ret;
-    uint32_t serv_path;
-    uint16_t sfid;
-    uint64_t data;
 
     ret = forwarder_init_next_sf_table();
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to initialize Forwarder Next-Func table.\n");
@@ -95,34 +92,6 @@ int forwarder_setup(void){
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to initialize Forwarder SF Address table.\n");
 
     sfcapp_cfg.main_loop = forwarder_main_loop;
-
-    /* Add table entries here!!! */
-    /*serv_path = 0x1FF; data = 0x1;
-    ret = rte_hash_add_key_data(forwarder_next_sf_lkp_table,&serv_path,(void *) data);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Could not add entry");
-    serv_path = 0x1FD; data = 0x3;
-    ret = rte_hash_add_key_data(forwarder_next_sf_lkp_table,&serv_path,(void *) data);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Could not add entry");
-    serv_path = 0x2FF; data = 0x3;    
-    ret = rte_hash_add_key_data(forwarder_next_sf_lkp_table,&serv_path,(void *) data);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Could not add entry");
-    serv_path = 0x2FE; data = 0x1;       
-    ret = rte_hash_add_key_data(forwarder_next_sf_lkp_table,&serv_path,(void *) data);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Could not add entry");
-
-    sfid = 0x1; data = 0x0000A1B1C1D1E1F1;
-    ret = rte_hash_add_key_data(forwarder_next_sf_address_lkp_table,&sfid,(void *) data);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Could not add entry");
-    sfid = 0x3; data = 0x0000A3B3C3D3E3F3;
-    ret = rte_hash_add_key_data(forwarder_next_sf_address_lkp_table,&sfid,(void *) data);
-    if(ret < 0)
-        rte_exit(EXIT_FAILURE,"Could not add entry");
-    */
     
     return 0;
 }
@@ -143,7 +112,7 @@ uint64_t *drop_mask){
         /* Check if this packet is for me! If not, drop*/
         lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
         if(lkp != 0){
-            *drop_mask &= 1<<i; 
+            *drop_mask |= 1<<i; 
             continue;
         }
 
@@ -169,8 +138,7 @@ uint64_t *drop_mask){
         /* Update MACs */
         common_64_to_mac(data,&sf_addr);
         common_mac_update(mbufs[i],&sfcapp_cfg.port1_mac,&sf_addr);
-
-        common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
+        sfcapp_cfg.rx_pkts++;
     }
 
 }
@@ -188,10 +156,10 @@ __attribute__((noreturn)) void forwarder_main_loop(void){
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,rx_pkts,
                     BURST_SIZE);
 
-        if(likely(nb_rx > 0))
+        if(likely(nb_rx > 0)){
             forwarder_handle_pkts(rx_pkts,nb_rx,&drop_mask);
-
-        /* Forwarder uses the same port for rx and tx */
-        send_pkts(rx_pkts,sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1,nb_rx,drop_mask);
+            /* Forwarder uses the same port for rx and tx */
+            sfcapp_cfg.tx_pkts += send_pkts(rx_pkts,sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1,nb_rx,drop_mask);
+        }
     }
 }
