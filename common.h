@@ -56,8 +56,7 @@ struct sfcapp_config {
     struct ether_addr sff_addr;                /* MAC address of SFF */
     enum sfcapp_type type;              /* SFC entity type */
     void (*main_loop)(void);
-
-    /* struct sfcapp_stats stats; */  
+    uint64_t rx_pkts, tx_pkts, dropped_pkts;
 };
 
 /*struct rte_cfgfile_parameters sfcapp_cfgfile_parameters = {
@@ -66,7 +65,7 @@ struct sfcapp_config {
 
 void common_flush_tx_buffers(void);
 
-void send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, struct rte_eth_dev_tx_buffer* tx_buffer,
+uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, struct rte_eth_dev_tx_buffer* tx_buffer,
  uint16_t nb_pkts, uint64_t drop_mask);
 
 void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple);

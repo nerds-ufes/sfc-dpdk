@@ -17,7 +17,6 @@
 #include "sfc_forwarder.h"
 
 /* Remove later */
-int n_rx=0, n_tx=0;
 
 static uint8_t nb_ports;
 struct sfcapp_config sfcapp_cfg;
@@ -140,8 +139,9 @@ static void
 signal_handler(int signum)
 {
 	if (signum == SIGINT || signum == SIGTERM) {
-		printf("\n\n%d packets received\n%d packets transmitted",
-				n_rx,n_tx);
+		printf("\n\n%ld packets received\n%ld packets transmitted\n"
+                "%ld packets dropped\n",
+				sfcapp_cfg.rx_pkts,sfcapp_cfg.rx_pkts,sfcapp_cfg.dropped_pkts);
     }
     
     exit(0);
@@ -242,35 +242,6 @@ init_port(uint8_t port, struct rte_mempool *mbuf_pool){
 
 }
 
-static __attribute__((noreturn)) void 
-main_loop(void) {
-    int rx_port = 0;
-    int tx_port = 1;
-
-    for(;;){
-        struct rte_mbuf *rx_pkts[BURST_SIZE];
-        uint16_t nb_rx = rte_eth_rx_burst(rx_port,0,
-            rx_pkts,BURST_SIZE);
-        
-        if(unlikely(nb_rx == 0))
-            continue;
-        
-        n_rx += nb_rx;
-        
-        uint16_t nb_tx = rte_eth_tx_burst(tx_port,0,
-            rx_pkts,nb_rx);
-
-        n_tx += nb_tx;
-
-        if(unlikely(nb_tx < nb_rx)){
-            uint16_t buf;
-            for(buf = nb_tx ; buf < nb_rx ; buf++)
-                rte_pktmbuf_free(rx_pkts[buf]);
-        }
-    
-    }
-}
-
 int 
 main(int argc, char **argv){
 
@@ -305,14 +276,18 @@ main(int argc, char **argv){
     rte_eth_macaddr_get(sfcapp_cfg.port2,&sfcapp_cfg.port2_mac);
 
     /* Init TX buffers */
-    sfcapp_cfg.tx_buffer1 = rte_malloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
+    sfcapp_cfg.tx_buffer1 = rte_zmalloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
     ret = rte_eth_tx_buffer_init(sfcapp_cfg.tx_buffer1,BURST_SIZE);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer1.\n");
+    rte_eth_tx_buffer_set_err_callback(sfcapp_cfg.tx_buffer1,
+        rte_eth_tx_buffer_count_callback,&sfcapp_cfg.dropped_pkts);
 
-    sfcapp_cfg.tx_buffer2 = rte_malloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
+    sfcapp_cfg.tx_buffer2 = rte_zmalloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
     ret = rte_eth_tx_buffer_init(sfcapp_cfg.tx_buffer2,BURST_SIZE);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer2.\n");
-
+    rte_eth_tx_buffer_set_err_callback(sfcapp_cfg.tx_buffer2,
+        rte_eth_tx_buffer_count_callback,&sfcapp_cfg.dropped_pkts);
+        
     nb_lcores = rte_lcore_count();
     SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
 
@@ -332,6 +307,11 @@ main(int argc, char **argv){
     sfcapp_cfg.sff_addr.addr_bytes[3] = 0x00;
     sfcapp_cfg.sff_addr.addr_bytes[4] = 0x00;
     sfcapp_cfg.sff_addr.addr_bytes[5] = 0x05;
+
+    /* Reset stats */
+    sfcapp_cfg.tx_pkts = 0;
+    sfcapp_cfg.rx_pkts = 0;
+    sfcapp_cfg.dropped_pkts = 0;
 
     /* Start app (single core) */
     (sfcapp_cfg.main_loop)();
