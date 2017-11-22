@@ -1,7 +1,8 @@
-#!/usr/bin/env python       
+﻿#!/usr/bin/env python       
 from scapy.all import *
 from scapy.layers.vxlan import VXLAN
 from scapy.contrib.nsh import NSH
+from bs4 import BeautifulSoup
 import netifaces
 import sys                                                                                                                 
 
@@ -11,10 +12,26 @@ def append_data(pkt):
         if NSH in pkt:
             #print "Received packet with NSH header"
             #pkt.summary()
+            inner_pkt = pkt[NSH].payload
+            
+            if TCP in inner_pkt:
+                http_msg = str(inner_pkt[TCP].payload)
+                s = http_msg.split("\r\n\r\n")
+            
+                # Add content to html file
+                if len(s) > 1:
+                    headers = s[0]
+                    content = s[1]
+                    soup = BeautifulSoup(content,'html.parser')
+                    soup.body.string += "SF #" + sfid + " says hi!\n"
+                    inner_pkt[TCP].remove_payload()
+                    pkt /= headers + "\r\n\r\n" + str(soup)
+                    print "=== Modified HTML file ===="
+                    print soup.prettify()
+                else:
+                    print "Split failed!"
 
-            pkt = pkt/Raw(load=" SF #" + str(sfid) + " says hi! ")
             pkt[NSH].SI -= 1
-
             pkt[Ether].src = out_mac
             pkt[Ether].dst = sff_address
 
