@@ -129,6 +129,27 @@ int parse_ipv4(const char *str, uint32_t *ipv4){
     return 0;
 }
 
+static void parse_global_section(struct rte_cfgfile_entry *entries, int nb_entries){
+
+    int ret;
+    const char* SECTION_NAME = "GLOBAL";
+    int NARGS = 1;
+
+    if(nb_entries != 1)
+        rte_exit(EXIT_FAILURE,
+            "Wrong number of arguments in global section in config file. Expected %d, found %d",
+            NARGS,nb_entries);
+
+    if(strcmp(entries[0].name,"sff_mac") == 0){
+        ret = parse_ether(entries[0].value,&sfcapp_cfg.sff_addr);
+        SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to parse mac address from config file\n");
+    }else{
+        rte_exit(EXIT_FAILURE,
+            "Entry %s unknown in section %s, please check config file.\n",
+            entries[0].name,SECTION_NAME); 
+    }
+}
+
 static void parse_sf_section(struct rte_cfgfile_entry *entries, int nb_entries){
     int j,ret;
     int sfid_ok, mac_ok;
@@ -359,7 +380,7 @@ void parse_config_file(char* cfg_filename){
     int nb_sections;
     struct rte_cfgfile_parameters cfg_params = {.comment_character = '#'};
 
-    cfgfile = rte_cfgfile_load_with_params(cfg_filename,0,&cfg_params);
+    cfgfile = rte_cfgfile_load_with_params(cfg_filename,CFG_FLAG_GLOBAL_SECTION,&cfg_params);
     
     if(cfgfile == NULL)
         rte_exit(EXIT_FAILURE,
@@ -400,6 +421,8 @@ void parse_config_file(char* cfg_filename){
             parse_sfc_node_section(entries,nb_entries);
         else if(strcmp(sections[i],"FLOW_CLASS") == 0)
             parse_flow_class_section(entries,nb_entries);
+        else if(strcmp(sections[i],"GLOBAL") == 0)
+            parse_global_section(entries,nb_entries);
         else
             rte_exit(EXIT_FAILURE,
                 "Section %s unknown, please check config file.\n",

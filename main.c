@@ -301,19 +301,17 @@ main(int argc, char **argv){
      * Will change this later! This should come from terminal or a config file
      */
 
-    sfcapp_cfg.sff_addr.addr_bytes[0] = 0x00;
-    sfcapp_cfg.sff_addr.addr_bytes[1] = 0x00;
-    sfcapp_cfg.sff_addr.addr_bytes[2] = 0x00;
-    sfcapp_cfg.sff_addr.addr_bytes[3] = 0x00;
-    sfcapp_cfg.sff_addr.addr_bytes[4] = 0x00;
-    sfcapp_cfg.sff_addr.addr_bytes[5] = 0x05;
+    char mac[64];
+    ether_format_addr(mac,64,&sfcapp_cfg.sff_addr);
+    printf("SFF MAC: %s\n",mac);
 
     /* Reset stats */
     sfcapp_cfg.tx_pkts = 0;
     sfcapp_cfg.rx_pkts = 0;
     sfcapp_cfg.dropped_pkts = 0;
-
+    
     /* Start app (single core) */
+    printf("Running...\n");
     (sfcapp_cfg.main_loop)();
 
     return 0;
