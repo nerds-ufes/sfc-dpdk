@@ -121,15 +121,12 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, ui
         /* Check if this packet is for me! If not, drop*/
         lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
         if(lkp != 0){
-            printf("Not for me!\n");
             *drop_mask |= 1<<i; 
             continue;
         }
 
         /* Get 5-tuple */
         common_ipv4_get_5tuple(mbufs[i],&tuple,offset);
-
-        common_print_ipv4_5tuple(&tuple); printf("\n");
     
         /* Get matching SFP from table */
         lkp = rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);

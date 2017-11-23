@@ -127,6 +127,11 @@ uint64_t *drop_mask){
 
         sfid = (uint16_t) data;
 
+        /* End of chain */
+        if(sfid == 0){
+            nsh_decap(mbufs[i]);
+            printf("End of chain!!!\n");
+        }
         /* Match SFID to address in table */
         lkp = rte_hash_lookup_data(forwarder_next_sf_address_lkp_table,
                 (void*) &sfid,
@@ -137,7 +142,7 @@ uint64_t *drop_mask){
 
         /* Update MACs */
         common_64_to_mac(data,&sf_addr);
-        common_mac_update(mbufs[i],&sfcapp_cfg.port1_mac,&sf_addr);
+        common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_addr);
         sfcapp_cfg.rx_pkts++;
     }
 
@@ -159,7 +164,7 @@ __attribute__((noreturn)) void forwarder_main_loop(void){
         if(likely(nb_rx > 0)){
             forwarder_handle_pkts(rx_pkts,nb_rx,&drop_mask);
             /* Forwarder uses the same port for rx and tx */
-            sfcapp_cfg.tx_pkts += send_pkts(rx_pkts,sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1,nb_rx,drop_mask);
+            sfcapp_cfg.tx_pkts += send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask);
         }
     }
 }
