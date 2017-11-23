@@ -84,7 +84,8 @@ void nsh_decap(struct rte_mbuf* mbuf){
     /* Adjust VXLAN-gpe header */
     vxlan_flags = rte_be_to_cpu_32(vxl_hdr->vx_flags);
 
-    vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG | VXLAN_INSTANCE_FLAG; /* Set vxlan flags */
+    vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG; /* Set vxlan flags */
+    vxlan_flags &= ~ VXLAN_INSTANCE_FLAG;
     vxlan_flags &= ~VXLAN_NEXT_MASK; /* zero next-proto field */
     vxlan_flags |= VXLAN_NEXT_ETHER;
 
