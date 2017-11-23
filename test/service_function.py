@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python       
+#!/usr/bin/env python       
 from scapy.all import *
 from scapy.layers.vxlan import VXLAN
 from scapy.contrib.nsh import NSH

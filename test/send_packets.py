@@ -2,15 +2,20 @@
 
 from scapy.all import *
 from scapy.contrib.nsh import NSH
+import netifaces
 import sys
 
-if len(sys.argv) <= 1:
+if len(sys.argv) <= 2:
     with_nsh = True
-elif sys.argv[1] == "no-nsh":
+elif sys.argv[2] == "no-nsh":
     with_nsh = False
 else:
-    print "Argument unknown. Only \"no-nsh\" allowed."
+    print "Argument unknown at position 2. Only \"no-nsh\" allowed."
     exit(1)
+
+out_iface = sys.argv[1]
+out_src_mac = netifaces.ifaddresses(out_iface)[netifaces.AF_LINK][0]['addr']
+choose = sys.argv[3]
 
 html  = """
 <html>
@@ -30,11 +35,11 @@ http_resp += html
 
 # Generate input packets
 i_eth = Ether(src="AA:BB:CC:DD:EE:FF",dst="AA:AA:AA:AA:AA:AA")
-i_ip = IP(src="10.1.0.1",dst="10.1.0.2")
+i_ip = IP(src="10." + choose + ".0.1",dst="10." + choose + ".0.2")
 i_tcp = TCP(sport=1000,dport=2000)
 
 
-o_eth = Ether(src="7a:78:3c:f8:be:43",dst="00:00:00:00:00:02")
+o_eth = Ether(src=out_src_mac,dst="00:00:00:00:00:02")
 o_ip = IP(src="10.0.0.1",dst="10.0.0.200")
 o_udp = UDP()
 
@@ -49,4 +54,4 @@ print "Beautiful packet!\n"
 in_pkt.show()
 print "Ugly packet!\n"
 hexdump(in_pkt)
-sendp(in_pkt,iface="br0")
+sendp(in_pkt,iface=out_iface)
