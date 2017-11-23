@@ -253,7 +253,7 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
     for(i = 0 ; i < nb_pkts ; i++){
 
         /* Check if this packet is for me! If not, drop*/
-        lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
+        lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port2_mac);
         if(lkp != 0){
             *drop_mask &= 1<<i; 
             continue;
@@ -277,7 +277,7 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
         /* Add SFF's MAC address */
         common_mac_update(mbufs[i],&sfcapp_cfg.port1_mac,&sfcapp_cfg.sff_addr);
 
-        //common_dump_pkt(mbufs[i],"\n=== Encapsulated packet ===\n");
+        common_dump_pkt(mbufs[i],"\n=== Encapsulated packet ===\n");
     }
 }
 

@@ -9,10 +9,14 @@ import sys
 def append_data(pkt):
 
     if pkt[Ether].dst == in_mac:
-        if NSH in pkt:
-            #print "Received packet with NSH header"
-            #pkt.summary()
-            inner_pkt = pkt[NSH].payload
+        if VXLAN in pkt:
+            if NSH in pkt:
+                #print "Received packet with NSH header"
+                #pkt.summary()
+                inner_pkt = pkt[NSH].payload
+                pkt[NSH].SI -= 1
+            else: # No NSH
+                inner_pkt = pkt[VXLAN].payload
             
             if TCP in inner_pkt:
                 http_msg = str(inner_pkt[TCP].payload)
@@ -31,12 +35,13 @@ def append_data(pkt):
                 else:
                     print "Split failed!"
 
-            pkt[NSH].SI -= 1
+            
             pkt[Ether].src = out_mac
             pkt[Ether].dst = sff_address
 
+            pkt.show()
             sendp(pkt,iface=out_iface)
-            
+                
             #print "=== Sent NSH packet: ==="
             #print "Beaufiful: "
             #pkt.show()
