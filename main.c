@@ -1,4 +1,4 @@
-﻿#include <stdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <getopt.h>
 #include <signal.h>
@@ -246,7 +246,7 @@ int
 main(int argc, char **argv){
 
     int ret=0;
-    int nb_lcores;
+    unsigned nb_lcores;
 
     ret = rte_eal_init(argc,argv);
     if(ret < 0)
@@ -259,7 +259,14 @@ main(int argc, char **argv){
 
     parse_args(argc,argv);
 
-    alloc_mem(NB_MBUF);
+    nb_lcores = rte_lcore_count();
+    SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
+
+    alloc_mem(RTE_MAX(2*NB_RX_DESC +
+              2*nb_lcores*BURST_SIZE +
+              2*NB_TX_DESC +
+              nb_lcores*MEMPOOL_CACHE_SIZE,
+              (unsigned) 8192));
 
     /* Remove later*/
     signal(SIGINT, signal_handler);
@@ -276,20 +283,17 @@ main(int argc, char **argv){
     rte_eth_macaddr_get(sfcapp_cfg.port2,&sfcapp_cfg.port2_mac);
 
     /* Init TX buffers */
-    sfcapp_cfg.tx_buffer1 = rte_zmalloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
+    sfcapp_cfg.tx_buffer1 = rte_zmalloc(NULL, RTE_ETH_TX_BUFFER_SIZE(TX_BUFFER_SIZE), 0);
     ret = rte_eth_tx_buffer_init(sfcapp_cfg.tx_buffer1,BURST_SIZE);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer1.\n");
     rte_eth_tx_buffer_set_err_callback(sfcapp_cfg.tx_buffer1,
         rte_eth_tx_buffer_count_callback,&sfcapp_cfg.dropped_pkts);
 
-    sfcapp_cfg.tx_buffer2 = rte_zmalloc(NULL, RTE_ETH_TX_BUFFER_SIZE(BURST_SIZE), 0);
+    sfcapp_cfg.tx_buffer2 = rte_zmalloc(NULL, RTE_ETH_TX_BUFFER_SIZE(TX_BUFFER_SIZE), 0);
     ret = rte_eth_tx_buffer_init(sfcapp_cfg.tx_buffer2,BURST_SIZE);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to create TX buffer2.\n");
     rte_eth_tx_buffer_set_err_callback(sfcapp_cfg.tx_buffer2,
         rte_eth_tx_buffer_count_callback,&sfcapp_cfg.dropped_pkts);
-        
-    nb_lcores = rte_lcore_count();
-    SFCAPP_CHECK_FAIL_LT(nb_lcores,1,"Not enough lcores! At least 1 needed.\n");
 
     /* Initialize corresponding tables */
     setup_app();

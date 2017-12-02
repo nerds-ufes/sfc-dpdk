@@ -13,12 +13,17 @@
 #define NB_MBUF 4096 /* I might change this value later*/
 #define NB_RX_QS 1
 #define NB_TX_QS 1
-#define NB_RX_DESC 128
-#define NB_TX_DESC 128
-#define BURST_SIZE 8
+#define NB_RX_DESC 2048
+#define NB_TX_DESC 2048
+#define BURST_SIZE 64
+
+#define TX_BUFFER_SIZE 1024
+
 
 #define IP_PROTO_UDP 0x11
 #define IP_PROTO_TCP 0x06
+
+#define VXLAN_PORT 4789
 
 #define CFG_FILE_MAX_SECTIONS 1024
 
@@ -70,7 +75,7 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, stru
 
 void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple);
 
-void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, uint16_t offset);
+int common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, uint16_t offset);
 
 void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tuples, 
     struct ipv4_5tuple **tuple_ptrs, uint16_t nb_pkts);
@@ -84,5 +89,7 @@ uint64_t common_mac_to_64(struct ether_addr *mac);
 void common_64_to_mac(uint64_t val, struct ether_addr *mac);
 
 int common_check_destination(struct rte_mbuf *mbuf, struct ether_addr *mac);
+
+void common_vxlan_encap(struct rte_mbuf *mbuf);
 
 #endif

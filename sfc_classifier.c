@@ -108,49 +108,48 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, ui
     uint64_t path_info;
     struct ipv4_5tuple tuple;
     struct nsh_hdr nsh_header;
-    uint16_t offset;
-    int lkp;
+    int lkp,ret;
 
     *drop_mask = 0;
 
-    offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
-    sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr);
-
     for(i = 0 ; i < nb_pkts ; i++){
-
-        /* Check if this packet is for me! If not, drop*/
-        lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
-        if(lkp != 0){
-            *drop_mask |= 1<<i; 
-            continue;
-        }
-
+        
         /* Get 5-tuple */
-        common_ipv4_get_5tuple(mbufs[i],&tuple,offset);
+        ret = common_ipv4_get_5tuple(mbufs[i],&tuple,0);
+        COND_MARK_DROP(ret,drop_mask);
     
         /* Get matching SFP from table */
         lkp = rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);
-        COND_MARK_DROP(lkp,drop_mask);
-
-        common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
-
-        nsh_init_header(&nsh_header);
-        nsh_header.serv_path = (uint32_t) path_info;
-
-        /* Encapsulate packet */
-        nsh_encap(mbufs[i],&nsh_header);
         
-        common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sfcapp_cfg.sff_addr);
+        //COND_MARK_DROP(lkp,drop_mask);
+
+        //common_print_ipv4_5tuple(&tuple); printf("\n");
+
+        if(lkp >= 0){ /* Has entry in table */
+
+            //printf("Match!\n");
+
+            /* Encapsulate with VXLAN */
+            common_vxlan_encap(mbufs[i]);
+            
+            nsh_init_header(&nsh_header);
+            nsh_header.serv_path = (uint32_t) path_info;
+
+            /* Encapsulate packet */
+            nsh_encap(mbufs[i],&nsh_header);
+            
+            common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sfcapp_cfg.sff_addr);
+        }
+
+        /* No matching SFP, then just give back to network
+         * without modification. 
+         */
 
         sfcapp_cfg.rx_pkts++;
+
+        //common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
     }
 }
-
-/* Parameters: 
- * forwarder_mac
- * SFP (ID e SI inicial)
- * classification rule (5-tuple to SFP)*/
-/* static classifier_parse_config_file(char** cfg_filename); */
 
 
 /* Receive non-NSH packets

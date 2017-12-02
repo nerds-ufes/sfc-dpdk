@@ -124,26 +124,29 @@ uint64_t *drop_mask){
                 (void **) &data);
         COND_MARK_DROP(lkp,drop_mask);
 
-
         sfid = (uint16_t) data;
-
-        /* End of chain */
-        if(sfid == 0){
+       
+        if(sfid == 0){  /* End of chain */
             nsh_decap(mbufs[i]);
-            printf("End of chain!!!\n");
-        }
-        /* Match SFID to address in table */
-        lkp = rte_hash_lookup_data(forwarder_next_sf_address_lkp_table,
-                (void*) &sfid,
-                (void**) &data);
-        COND_MARK_DROP(lkp,drop_mask);
-        
-        common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
+            //printf("End of chain!!!\n");
 
-        /* Update MACs */
-        common_64_to_mac(data,&sf_addr);
-        common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_addr);
-        sfcapp_cfg.rx_pkts++;
+            /* Remove VXLAN encap! */
+            rte_pktmbuf_adj(mbufs[i],
+                sizeof(struct ether_hdr) +
+                sizeof(struct ipv4_hdr) +
+                sizeof(struct udp_hdr) +
+                sizeof(struct vxlan_hdr));
+        }else{
+            /* Match SFID to address in table */
+            lkp = rte_hash_lookup_data(forwarder_next_sf_address_lkp_table,
+                    (void*) &sfid,
+                    (void**) &data);
+            COND_MARK_DROP(lkp,drop_mask);
+            /* Update MACs */
+            common_64_to_mac(data,&sf_addr);
+            common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_addr);
+            sfcapp_cfg.rx_pkts++;
+        }
     }
 
 }

@@ -5,11 +5,24 @@
 #include <rte_ethdev.h>
 #include <rte_mbuf.h>
 #include <rte_byteorder.h>
+#include <rte_hash_crc.h>
+#include <rte_ip.h>
+#include <rte_udp.h>
 
 #include "common.h"
+#include "vxlan_gpe.h"
 
 extern struct sfcapp_config sfcapp_cfg;
 extern long int n_rx, n_tx;
+
+#define PORT_MIN	49152
+#define PORT_MAX	65535
+#define PORT_RANGE ((PORT_MAX - PORT_MIN) + 1)
+#define SFCAPP_DEFAULT_VNI 1000
+#define IP_VERSION 0x40
+#define IP_HDRLEN  0x05 
+#define IP_DEFTTL  64
+#define IP_VHL_DEF (IP_VERSION | IP_HDRLEN)
 
 void common_flush_tx_buffers(void){
     rte_eth_tx_buffer_flush(sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1);
@@ -28,7 +41,9 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, stru
             total_sent += sent;
 //            if(sent)
 //                printf("%" PRIu16 " packets sent!\n",sent);
-        }
+        }else
+            sfcapp_cfg.dropped_pkts++;
+            
     }
     
     return total_sent;
@@ -49,23 +64,30 @@ void common_print_ipv4_5tuple(struct ipv4_5tuple *tuple){
     sprint_ipv4(tuple->src_ip,ip1);
     sprint_ipv4(tuple->dst_ip,ip2);
 
-    printf("<ipsrc: %s, ipdst: %s, proto: 0x%02" PRIu8 ", psrc: %" PRIu16 
+    printf("<ipsrc: %s, ipdst: %s, proto: %02" PRIu8 ", psrc: %" PRIu16 
            ", pdst: %" PRIu16 ">",ip1,ip2,tuple->proto,
            tuple->src_port,tuple->dst_port);
 }
 
-void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, uint16_t offset){
+int common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, uint16_t offset){
     struct ipv4_hdr *ipv4_hdr;
     struct tcp_hdr *tcp_hdr;
     struct udp_hdr *udp_hdr;
+    struct ether_hdr *eth_hdr;
+
+    eth_hdr = rte_pktmbuf_mtod(mbuf,struct ether_hdr *);
+
+    if(rte_be_to_cpu_16(eth_hdr->ether_type) != ETHER_TYPE_IPv4)
+        return -1;
 
     ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf,struct ipv4_hdr *,
                     (offset + sizeof(struct ether_hdr)));
 
+
     tuple->src_ip = rte_be_to_cpu_32(ipv4_hdr->src_addr);
     tuple->dst_ip = rte_be_to_cpu_32(ipv4_hdr->dst_addr);
     tuple->proto  = ipv4_hdr->next_proto_id;
-
+    
     switch(tuple->proto){
         case IP_PROTO_UDP:
             udp_hdr = (struct udp_hdr *) ( (unsigned char*) ipv4_hdr + sizeof(struct ipv4_hdr));
@@ -78,61 +100,13 @@ void common_ipv4_get_5tuple(struct rte_mbuf *mbuf, struct ipv4_5tuple *tuple, ui
             tuple->dst_port = rte_be_to_cpu_16(tcp_hdr->dst_port);
             break;
         default:
+            tuple->src_port = 0;
+            tuple->dst_port = 0;
             break;
-
-    }  
-}
-
-void common_ipv4_get_5tuple_bulk(struct rte_mbuf **mbufs, struct ipv4_5tuple *tuples, 
-    struct ipv4_5tuple **tuples_ptrs, uint16_t nb_pkts)
-{
-    struct ether_hdr *eth_hdr;
-    struct ipv4_hdr *ipv4_hdr;
-    struct tcp_hdr *tcp_hdr;
-    struct udp_hdr *udp_hdr;
-    struct ipv4_5tuple *curr_tuple;
-    //uint16_t eth_type;
-
-    int i;
-
-    for(i = 0 ; i < nb_pkts ; i++){
-        
-        curr_tuple = &tuples[i];
-        tuples_ptrs[i] = curr_tuple;
-
-        eth_hdr = rte_pktmbuf_mtod(mbufs[i], struct ether_hdr *);        
-
-        if(RTE_ETH_IS_IPV4_HDR(mbufs[i]->packet_type)){
-            ipv4_hdr = (struct ipv4_hdr *) (eth_hdr + sizeof(struct ether_hdr));
-            curr_tuple->src_ip = ipv4_hdr->src_addr;
-            curr_tuple->dst_ip = ipv4_hdr->dst_addr;
-            curr_tuple->proto = ipv4_hdr->next_proto_id;
-
-            switch(curr_tuple->proto){
-                case IP_PROTO_UDP:
-                    udp_hdr = (struct udp_hdr *) (ipv4_hdr + sizeof(struct ipv4_hdr));
-                    curr_tuple->src_port = udp_hdr->src_port;
-                    curr_tuple->dst_port = udp_hdr->dst_port;
-                    break;
-                case IP_PROTO_TCP:
-                    tcp_hdr = (struct tcp_hdr *) (ipv4_hdr + sizeof(struct ipv4_hdr));
-                    curr_tuple->src_port = tcp_hdr->src_port;
-                    curr_tuple->dst_port = tcp_hdr->dst_port;
-                    break;
-                default:
-                    break;
-            }
-            
-            common_print_ipv4_5tuple(curr_tuple);
-        }else{
-            ;/* Currently only treating IPv4 payloads*/
-        }
     }
 
-    if(unlikely(nb_pkts > 0))
-        printf("Finishing ipv4_get_5tuple_bulk()!\n ");
+    return 0;
 }
-
 
 void common_mac_update(struct rte_mbuf *mbuf, struct ether_addr *src, struct ether_addr *dst){
     struct ether_hdr *eth_hdr;
@@ -179,4 +153,53 @@ int common_check_destination(struct rte_mbuf *mbuf, struct ether_addr *mac){
     /*if(res == 0)
         printf("Comparing %s == %s => result: %d\n",mac1,mac2,res);
     */return res;
+}
+
+void common_vxlan_encap(struct rte_mbuf *mbuf){
+    struct ether_hdr *eth_hdr, *inner_ether;
+    struct ipv4_hdr *ipv4_hdr;
+    struct udp_hdr *udp_hdr;
+    struct vxlan_hdr *vxlan_hdr;
+    uint16_t old_pkt_len;
+    uint32_t hash;
+
+    old_pkt_len = mbuf->pkt_len;
+    inner_ether = rte_pktmbuf_mtod(mbuf,struct ether_hdr *);
+    hash = rte_hash_crc(inner_ether,2*ETHER_ADDR_LEN,inner_ether->ether_type);
+
+    eth_hdr = (struct ether_hdr *) rte_pktmbuf_prepend(mbuf,sizeof(struct ether_hdr) + 
+        sizeof(struct ipv4_hdr) + sizeof(struct udp_hdr) + 
+        sizeof(struct vxlan_hdr));
+    
+    ipv4_hdr  = (struct ipv4_hdr *) (((char*) eth_hdr) + sizeof(struct ether_hdr));
+    udp_hdr   = (struct udp_hdr *) (((char*) ipv4_hdr) + sizeof(struct ipv4_hdr));
+    vxlan_hdr = (struct vxlan_hdr *) ( ((char*) udp_hdr) + sizeof(struct udp_hdr));
+
+    /* Outer Ethernet must be updated by caller function later */
+    eth_hdr->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
+
+    /* These are just placeholders for now.
+     * Currently all communication is done in L2.
+     */
+    ipv4_hdr->version_ihl = IP_VHL_DEF;
+    ipv4_hdr->type_of_service = 0;
+    ipv4_hdr->fragment_offset = 0;
+    ipv4_hdr->time_to_live = IP_DEFTTL;
+    ipv4_hdr->packet_id = 0;
+    ipv4_hdr->hdr_checksum = 0;
+    ipv4_hdr->src_addr = rte_cpu_to_be_32(IPv4(10,10,10,10));
+    ipv4_hdr->dst_addr = rte_cpu_to_be_32(IPv4(10,10,10,11));
+    ipv4_hdr->next_proto_id = IP_PROTO_UDP;
+    ipv4_hdr->total_length = rte_cpu_to_be_16(mbuf->pkt_len - 
+        sizeof(struct ether_hdr));
+
+    udp_hdr->dgram_cksum = 0;
+    udp_hdr->dgram_len = rte_cpu_to_be_16(old_pkt_len + 
+        sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr));
+    udp_hdr->dst_port = rte_cpu_to_be_16(VXLAN_PORT);
+    udp_hdr->src_port = rte_cpu_to_be_16((((uint64_t) hash * PORT_RANGE) >> 32)
+					+ PORT_MIN);
+
+    vxlan_hdr->vx_flags = rte_cpu_to_be_32(VXLAN_INSTANCE_FLAG);
+    vxlan_hdr->vx_vni = rte_cpu_to_be_32(SFCAPP_DEFAULT_VNI << 8);
 }

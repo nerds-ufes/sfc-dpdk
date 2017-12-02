@@ -200,7 +200,7 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
             nsh_header.serv_path++;
         }
 
-        common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
+        //common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
         
         /* Decapsulate packet */
         nsh_decap(mbufs[i]);
@@ -215,30 +215,20 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
         sfid = (uint16_t) data;
 
-        /*if(lkp >= 0){
-            printf("Found the SF ID!!! Data: %" PRIx16 "\n",sfid);
-        }else{
-            printf("Didn't find %" PRIx32 " the corresponding sfid\n",nsh_header.serv_path);
-        }*/
-
-        //printf("Trying to get MAC for SF #%" PRIx16 "\n",sfid);
-
         lkp = rte_hash_lookup_data(proxy_sf_address_lkp_table,
                 (void *) &sfid,
                 (void **) &sf_mac_64);
 
-        // Currently not droping packets
         COND_MARK_DROP(lkp,drop_mask);
-        /*else{
-            printf("Found the MAC!!!!\n");
-        }*/
 
         // Convert hash data back to MAC
         common_64_to_mac(sf_mac_64,&sf_mac);
 
         common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_mac);
         
-        common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
+        //printf("Sending to function...\n");
+        //common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
+        sfcapp_cfg.rx_pkts++;
     }
 }
 
@@ -252,12 +242,15 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
 
     for(i = 0 ; i < nb_pkts ; i++){
 
+
         /* Check if this packet is for me! If not, drop*/
         lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port2_mac);
         if(lkp != 0){
-            *drop_mask &= 1<<i; 
+            *drop_mask &= 1<<i;
             continue;
         }
+
+        //common_dump_pkt(mbufs[i],"\n=== Received from SF ===\n");
 
         offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
             sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr);
@@ -276,8 +269,10 @@ static void proxy_handle_outbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts
 
         /* Add SFF's MAC address */
         common_mac_update(mbufs[i],&sfcapp_cfg.port1_mac,&sfcapp_cfg.sff_addr);
+        sfcapp_cfg.rx_pkts++;
 
-        common_dump_pkt(mbufs[i],"\n=== Encapsulated packet ===\n");
+        //printf("Sending to SFF...\n");
+        //common_dump_pkt(mbufs[i],"\n=== Encapsulated packet ===\n");
     }
 }
 
@@ -299,8 +294,7 @@ void proxy_main_loop(void){
 	    /* Process and decap received packets*/
         proxy_handle_inbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
-        /* TODO: Only send packets not marked for dropping */
-        send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask);
+        sfcapp_cfg.tx_pkts += send_pkts(rx_pkts,sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2,nb_rx,drop_mask);
 
         drop_mask = 0;
 
@@ -311,8 +305,7 @@ void proxy_main_loop(void){
         /* Process and encap packets from SFs */
         proxy_handle_outbound_pkts(rx_pkts,nb_rx,&drop_mask);
 
-        /* TODO: Only send packets not marked for dropping  */
-        send_pkts(rx_pkts,sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1,nb_rx,drop_mask); 
+        sfcapp_cfg.tx_pkts += send_pkts(rx_pkts,sfcapp_cfg.port1,0,sfcapp_cfg.tx_buffer1,nb_rx,drop_mask); 
     }
 }
 
