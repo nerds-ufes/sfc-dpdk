@@ -1,4 +1,4 @@
-# Kill all ovs processes currently running
+﻿# Kill all ovs processes currently running
 echo "Killing ovs processes currently running..."
 killall ovsdb-server ovs-vswitchd
 echo "Done."
@@ -71,12 +71,7 @@ ovs-vsctl --no-wait add-port br0 vhost-user3 -- set Interface vhost-user3 type=d
 echo "Finished configuring vhostuser port 2"
 sleep 1
 
-# Create mirror port to analyze packets with Wireshark
-:'ovs-vsctl add-port br0 tap1 \
-    -- --id=@p get port tap1 \
-    -- --id=@m create mirror name=m0 select-all=true output-port=@p \
-    -- set bridge br0 mirrors=@m
-'
+
 ## At this point, the vhost-user socket will be located at /usr/local/var/run/openvswitch/<vhost port name>
 ## This is important to set up the VM on next step
 echo "Done."
@@ -89,4 +84,7 @@ ovs-vsctl show
 ###################################
 
 ovs-ofctl add-flow br0 action=NORMAL
+    
+# Add flow to rewrite input packet's dst MAC to classifier's MAC
+ovs-ofctl add-flow br0 priority=65535,in_port=124,actions=mod_dl_dst:00:00:00:00:00:02,NORMAL
 echo "OvS Configuration Finished."

@@ -8,38 +8,20 @@ import sys
 
 def append_data(pkt):
 
-    if pkt[Ether].dst == in_mac:
-        if VXLAN in pkt:
+    #if pkt[Ether].dst == in_mac:
+    #    if VXLAN in pkt:
             if NSH in pkt:
                 #print "Received packet with NSH header"
                 #pkt.summary()
-                inner_pkt = pkt[NSH].payload
+              #  inner_pkt = pkt[NSH].payload
                 pkt[NSH].SI -= 1
-            else: # No NSH
-                inner_pkt = pkt[VXLAN].payload
-            
-            if TCP in inner_pkt:
-                http_msg = str(inner_pkt[TCP].payload)
-                s = http_msg.split("\r\n\r\n")
-            
-                # Add content to html file
-                if len(s) > 1:
-                    headers = s[0]
-                    content = s[1]
-                    soup = BeautifulSoup(content,'html.parser')
-                    soup.body.string += "SF #" + sfid + " says hi!\n"
-                    inner_pkt[TCP].remove_payload()
-                    pkt /= headers + "\r\n\r\n" + str(soup)
-                    print "=== Modified HTML file ===="
-                    print soup.prettify()
-                else:
-                    print "Split failed!"
-
-            
+            #else: # No NSH
+             #   inner_pkt = pkt[VXLAN].payload
+                      
             pkt[Ether].src = out_mac
             pkt[Ether].dst = sff_address
 
-            pkt.show()
+            #pkt.show()
             sendp(pkt,iface=out_iface)
                 
             #print "=== Sent NSH packet: ==="
