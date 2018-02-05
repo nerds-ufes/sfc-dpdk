@@ -3,6 +3,11 @@
 : ${RTE_SDK:?"Please set 'RTE_SDK' before running this script."}
 : ${RTE_TARGET:?"Please set 'RTE_TARGET' before running this script."}
 
+if [ -z $1 ]; then
+    echo "Please provide amount of 2MB hugepages to be allocated"
+    exit 1
+fi
+
 ###### Setup hugepages ######
 
 huge_dir=/mnt/huge
@@ -17,7 +22,7 @@ fi
 #mount -t hugetlbfs -o pagesize=1G none $huge_dir
 
 # Mount 2MB hugepages
-echo 512 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
+echo $1 > /sys/kernel/mm/hugepages/hugepages-2048kB/nr_hugepages
 mount -t hugetlbfs -o pagesize=2M none $huge_dir
 
 ###### Insert DPDK driver module ######

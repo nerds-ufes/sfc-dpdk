@@ -141,9 +141,6 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
     struct nsh_hdr nsh_header;
     struct ipv4_5tuple tuple = { .proto = 0, .src_ip = 0, .dst_ip = 0, .src_port = 0, .dst_port = 0};
-    //struct ipv4_5tuple ip_5tuples[BURST_SIZE];
-    //struct ipv4_5tuple *tuple_ptrs[BURST_SIZE];
-    //int32_t vals[BURST_SIZE];
     uint16_t sfid;
     uint64_t data;
     struct ether_addr sf_mac;
@@ -153,15 +150,8 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
     uint64_t nsh_header_64;
     *drop_mask = 0;
 
-    /* Check if flow info is already stored in table */
-    /*rte_hash_lookup_bulk(proxy_flow_lkp_table,(void **) tuple_ptrs,
-            nb_pkts,vals);
-    */
-    
-
     for(i = 0; i < nb_pkts ; i++){
 
-        /* Check if this packet is for me! If not, drop*/
         lkp = common_check_destination(mbufs[i],&sfcapp_cfg.port1_mac);
         if(lkp != 0){
             *drop_mask &= 1<<i; 
@@ -170,21 +160,15 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 
         nsh_get_header(mbufs[i],&nsh_header);
 
-
         offset = sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
             sizeof(struct udp_hdr) + sizeof(struct vxlan_hdr) +
             sizeof(struct nsh_hdr);
 
         common_ipv4_get_5tuple(mbufs[i],&tuple,offset);        
 
-        /* Check if flow info is already stored in table */
         lkp = rte_hash_lookup(proxy_flow_lkp_table,&tuple);
 
-        /* Flow not mapped yet in table. Let's add it */
         if(unlikely(lkp < 0)){
-            /* Decrement SI before storing header to save 
-             * processing time later. 
-             */
             if( (nsh_header.serv_path & 0x000000FF) != 0 ){
                 nsh_header.serv_path--;
             }else{ /* Drop packet */
@@ -195,19 +179,12 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
             nsh_header_64 = nsh_header_to_uint64(&nsh_header);
             lkp = rte_hash_add_key_data(proxy_flow_lkp_table,
                 &tuple, (void *) nsh_header_64);
-            
-            // Undo decrementing after saving to table
+
             nsh_header.serv_path++;
         }
 
-        //common_dump_pkt(mbufs[i],"\n=== Input packet ===\n");
-        
-        /* Decapsulate packet */
         nsh_decap(mbufs[i]);
         
-        //printf("Looking for SF for path %" PRIx32 "\n",nsh_header.serv_path);
-
-        /* Get SF MAC address from table */
         lkp = rte_hash_lookup_data(proxy_sf_id_lkp_table, 
                 (void *) &nsh_header.serv_path,
                 (void **) &data);
@@ -225,9 +202,6 @@ static void proxy_handle_inbound_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
         common_64_to_mac(sf_mac_64,&sf_mac);
 
         common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_mac);
-        
-        //printf("Sending to function...\n");
-        //common_dump_pkt(mbufs[i],"\n=== Decapsulated packet ===\n");
         sfcapp_cfg.rx_pkts++;
     }
 }
@@ -287,7 +261,7 @@ void proxy_main_loop(void){
         drop_mask = 0;
         common_flush_tx_buffers();
 
-        /* Receive packets from network */
+        /* Receive packets from network */  
         nb_rx = rte_eth_rx_burst(sfcapp_cfg.port1,0,
                      rx_pkts,BURST_SIZE);
 

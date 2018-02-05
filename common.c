@@ -29,8 +29,8 @@ void common_flush_tx_buffers(void){
     rte_eth_tx_buffer_flush(sfcapp_cfg.port2,0,sfcapp_cfg.tx_buffer2);
 }
 
-uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, struct rte_eth_dev_tx_buffer* tx_buffer,
- uint16_t nb_pkts, uint64_t drop_mask){
+uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, 
+    struct rte_eth_dev_tx_buffer* tx_buffer, uint16_t nb_pkts, uint64_t drop_mask){
     uint16_t i;
     uint16_t sent=0;
     uint16_t total_sent=0;
@@ -39,11 +39,8 @@ uint16_t send_pkts(struct rte_mbuf **mbufs, uint8_t tx_port, uint16_t tx_q, stru
         if( (drop_mask & (1<<i)) == 0 ){
             sent = rte_eth_tx_buffer(tx_port,tx_q,tx_buffer,mbufs[i]);
             total_sent += sent;
-//            if(sent)
-//                printf("%" PRIu16 " packets sent!\n",sent);
         }else
             sfcapp_cfg.dropped_pkts++;
-            
     }
     
     return total_sent;

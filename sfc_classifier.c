@@ -16,10 +16,6 @@ extern struct sfcapp_config sfcapp_cfg;
 extern long int n_rx, n_tx;
 
 static struct rte_hash* classifier_flow_path_lkp_table;
-/* key = ipv4_5tuple ; value = nsh_spi (3 Bytes)*/
-
-//static rte_hash* classifier_sfp_lkp_table;
-/* key = spi (nsh_spi) ; value = initial SI (uint8_t) */
 
 static int classifier_init_flow_path_table(void){
 
@@ -41,26 +37,6 @@ static int classifier_init_flow_path_table(void){
     return 0;
 }
 
-/*static int classifier_init_sfp_table(void){
-
-    const struct rte_hash_parameters hash_params = {
-        .name = "classifier_sfp",
-        .entries = CLASSIFIER_MAX_FLOWS,
-        .reserved = 0,
-        .key_len = sizeof(uint32_t),
-        .hash_func = rte_jhash,
-        .hash_func_init_val = 0,
-        .socket_id = rte_socket_id()
-    };
-
-    classifier_sfp_lkp_table = rte_hash_create(&hash_params);
-
-    if(classifier_sfp_lkp_table == NULL)
-        return -1;
-    
-    return 0;
-}*/
-
 void classifier_add_flow_class_entry(struct ipv4_5tuple *tuple, uint32_t sfp){
     int ret;
     struct ipv4_5tuple local_tuple;
@@ -75,21 +51,6 @@ void classifier_add_flow_class_entry(struct ipv4_5tuple *tuple, uint32_t sfp){
     printf("Added ");
     common_print_ipv4_5tuple(&local_tuple);
     printf(" -> %" PRIx32 " to classifier flow table\n",sfp);
-        
-    /*uint32_t it = 0;
-    struct ipv4_5tuple *key;
-    uint64_t data;
-    ret = 1;
-    printf("Printing contents of classifier_flow_path_lkp_table:\n");
-    while(ret >= 0){
-        ret = rte_hash_iterate(classifier_flow_path_lkp_table,(const void**) &key , (void **) &data,&it);
-        
-        if(ret >= 0){
-            common_print_ipv4_5tuple(key); printf(" -> ");
-            printf("%" PRIx32 "\n",(uint32_t) data);
-        }
-
-    }*/
 }
 
 int classifier_setup(void){
@@ -118,16 +79,10 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, ui
         ret = common_ipv4_get_5tuple(mbufs[i],&tuple,0);
         COND_MARK_DROP(ret,drop_mask);
     
-        /* Get matching SFP from table */
+        /* Get matching SPH from table */
         lkp = rte_hash_lookup_data(classifier_flow_path_lkp_table,&tuple,(void**) &path_info);
-        
-        //COND_MARK_DROP(lkp,drop_mask);
-
-        //common_print_ipv4_5tuple(&tuple); printf("\n");
 
         if(lkp >= 0){ /* Has entry in table */
-
-            //printf("Match!\n");
 
             /* Encapsulate with VXLAN */
             common_vxlan_encap(mbufs[i]);
@@ -139,24 +94,15 @@ static void classifier_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts, ui
             nsh_encap(mbufs[i],&nsh_header);
             
             common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sfcapp_cfg.sff_addr);
+            sfcapp_cfg.rx_pkts++;
         }
 
         /* No matching SFP, then just give back to network
          * without modification. 
          */
-
-        sfcapp_cfg.rx_pkts++;
-
-        //common_dump_pkt(mbufs[i],"\n=== Output packet ===\n");
     }
 }
-
-
-/* Receive non-NSH packets
- * Classify packet
- * Encapsulate
- * Send to forwarder
- */
+        
 __attribute__((noreturn)) void classifier_main_loop(void){
     uint16_t nb_rx;
     struct rte_mbuf *rx_pkts[BURST_SIZE];

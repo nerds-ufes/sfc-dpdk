@@ -1,4 +1,9 @@
-﻿# Kill all ovs processes currently running
+if [ -z $OVS_DIR ]; then
+  echo "Please set OVS_DIR environment variable first"
+  exit 1
+fi
+
+# Kill all ovs processes currently running
 echo "Killing ovs processes currently running..."
 killall ovsdb-server ovs-vswitchd
 echo "Done."
@@ -38,10 +43,12 @@ echo "Done."
 ###################################
 
 echo "Starting OVS..."
-ovs-vsctl --no-wait init
-ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0x3
-ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-socket-mem=2048,0
+#ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-lcore-mask=0x42
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-socket-mem=8192
+ovs-vsctl --no-wait set Open_vSwitch . other_config:pmd-cpu-mask=0x186
+ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-hugepage-dir=/mnt/huge
 ovs-vsctl --no-wait set Open_vSwitch . other_config:dpdk-init=true
+ovs-vsctl --no-wait init
 
 #Turn on daemon
 ovs-vswitchd \
@@ -50,41 +57,3 @@ ovs-vswitchd \
      --log-file=/usr/local/var/log/openvswitch/ovs-vswitchd.log &
 
 ###################################
-
-
-# Configure bridge
-
-echo "Configuring bridge and ports..."
-ovs-vsctl --no-wait add-br br0 -- set bridge br0 datapath_type=netdev
-sleep 1
-
-# Add ports
-
-ovs-vsctl --no-wait add-port br0 vhost-user1 -- set Interface vhost-user1 type=dpdkvhostuser
-echo "Finished configuring vhostuser port 1"
-sleep 1
-
-ovs-vsctl --no-wait add-port br0 vhost-user2 -- set Interface vhost-user2 type=dpdkvhostuser
-sleep 1
-
-ovs-vsctl --no-wait add-port br0 vhost-user3 -- set Interface vhost-user3 type=dpdkvhostuser
-echo "Finished configuring vhostuser port 2"
-sleep 1
-
-
-## At this point, the vhost-user socket will be located at /usr/local/var/run/openvswitch/<vhost port name>
-## This is important to set up the VM on next step
-echo "Done."
-###################################
-
-# Show configured bridge and ports.
-
-ovs-vsctl show
-
-###################################
-
-ovs-ofctl add-flow br0 action=NORMAL
-    
-# Add flow to rewrite input packet's dst MAC to classifier's MAC
-ovs-ofctl add-flow br0 priority=65535,in_port=124,actions=mod_dl_dst:00:00:00:00:00:02,NORMAL
-echo "OvS Configuration Finished."

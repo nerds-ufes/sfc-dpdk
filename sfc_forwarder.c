@@ -44,7 +44,7 @@ static int forwarder_init_sf_addr_table(void){
         .name = "forwarder_sf_addr",
         .entries = FORWARDER_TABLE_SZ,
         .reserved = 0,
-        .key_len = sizeof(uint16_t), /* <SPI,SI> */
+        .key_len = sizeof(uint16_t), /* SFID */
         .hash_func = rte_jhash,
         .hash_func_init_val = 0,
         .socket_id = rte_socket_id()
@@ -96,7 +96,6 @@ int forwarder_setup(void){
     return 0;
 }
 
-/* static forwarder_parse_config_file(char** sections, int nb_sections); */
 
 static inline void forwarder_handle_pkts(struct rte_mbuf **mbufs, uint16_t nb_pkts,
 uint64_t *drop_mask){
@@ -128,7 +127,6 @@ uint64_t *drop_mask){
        
         if(sfid == 0){  /* End of chain */
             nsh_decap(mbufs[i]);
-            //printf("End of chain!!!\n");
 
             /* Remove VXLAN encap! */
             rte_pktmbuf_adj(mbufs[i],
@@ -145,8 +143,9 @@ uint64_t *drop_mask){
             /* Update MACs */
             common_64_to_mac(data,&sf_addr);
             common_mac_update(mbufs[i],&sfcapp_cfg.port2_mac,&sf_addr);
-            sfcapp_cfg.rx_pkts++;
         }
+        
+        sfcapp_cfg.rx_pkts++;
     }
 
 }

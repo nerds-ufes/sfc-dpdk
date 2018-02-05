@@ -15,6 +15,7 @@
 #include "sfc_classifier.h"
 #include "sfc_proxy.h"
 #include "sfc_forwarder.h"
+#include "nsh.h"
 
 /* Remove later */
 
@@ -242,8 +243,7 @@ init_port(uint8_t port, struct rte_mempool *mbuf_pool){
 
 }
 
-int 
-main(int argc, char **argv){
+int main(int argc, char **argv){
 
     int ret=0;
     unsigned nb_lcores;
@@ -268,10 +268,11 @@ main(int argc, char **argv){
               nb_lcores*MEMPOOL_CACHE_SIZE,
               (unsigned) 8192));
 
-    /* Remove later*/
+    /* Set signal handlers */
     signal(SIGINT, signal_handler);
     signal(SIGTERM, signal_handler);
 
+    /* Setup interfaces */
     ret = init_port(sfcapp_cfg.port1,sfcapp_pktmbuf_pool);
     SFCAPP_CHECK_FAIL_LT(ret,0,"Failed to setup RX port.\n");
 
@@ -301,10 +302,7 @@ main(int argc, char **argv){
     /* Read config file and setup app*/    
     parse_config_file(cfg_filename);
 
-    /* Setting SFF MAC address 
-     * Will change this later! This should come from terminal or a config file
-     */
-
+    /* Print SFF's MAC read from config files */
     char mac[64];
     ether_format_addr(mac,64,&sfcapp_cfg.sff_addr);
     printf("SFF MAC: %s\n",mac);
@@ -314,7 +312,7 @@ main(int argc, char **argv){
     sfcapp_cfg.rx_pkts = 0;
     sfcapp_cfg.dropped_pkts = 0;
     
-    /* Start app (single core) */
+    /* Start application (single core) */
     printf("Running...\n");
     (sfcapp_cfg.main_loop)();
 

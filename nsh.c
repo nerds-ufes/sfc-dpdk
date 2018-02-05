@@ -42,7 +42,8 @@ void nsh_encap(struct rte_mbuf* mbuf, struct nsh_hdr *nsh_info){
     /* Adjust VXLAN-gpe header */
     vxlan_flags = rte_be_to_cpu_32(vxl_hdr->vx_flags);
 
-    vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG | VXLAN_INSTANCE_FLAG; /* Set vxlan flags */
+    /* Set vxlan flags */
+    vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG | VXLAN_INSTANCE_FLAG; 
     vxlan_flags &= ~VXLAN_NEXT_MASK; /* zero next-proto field */
     vxlan_flags |= VXLAN_NEXT_NSH;
 
@@ -85,13 +86,12 @@ void nsh_decap(struct rte_mbuf* mbuf){
     vxlan_flags = rte_be_to_cpu_32(vxl_hdr->vx_flags);
 
     vxlan_flags |= VXLAN_NEXT_PROTOCOL_FLAG; /* Set vxlan flags */
-    vxlan_flags &= ~ VXLAN_INSTANCE_FLAG;
+    vxlan_flags &= ~VXLAN_INSTANCE_FLAG;
     vxlan_flags &= ~VXLAN_NEXT_MASK; /* zero next-proto field */
     vxlan_flags |= VXLAN_NEXT_ETHER;
 
     vxl_hdr->vx_flags = rte_cpu_to_be_32(vxlan_flags);
 
-    
     /* Get pointer to beginning of inner packet data */
     init_new_inner = (char*) mbuf->buf_addr + rte_pktmbuf_headroom(mbuf) + 
         sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) + 
@@ -104,9 +104,6 @@ void nsh_decap(struct rte_mbuf* mbuf){
         init_new_inner[i] = init_new_inner[i+offset];    
     
     rte_pktmbuf_trim(mbuf,offset);
-
-    //printf("\n\n\n=== Decapped packet ===\n");
-    //rte_pktmbuf_dump(stdout,mbuf,mbuf->pkt_len);
 }
 
 int nsh_dec_si(struct rte_mbuf* mbuf){
@@ -119,7 +116,7 @@ int nsh_dec_si(struct rte_mbuf* mbuf){
 
     serv_path = rte_be_to_cpu_32(nsh_hdr->serv_path);
 
-    printf("SPI|SI before: %08" PRIx32 "\n",serv_path);
+    //printf("SPI|SI before: %08" PRIx32 "\n",serv_path);
     if( (serv_path & 0x000000FF) != 0 ){
         serv_path--;
         nsh_hdr->serv_path = rte_cpu_to_be_32(serv_path);
